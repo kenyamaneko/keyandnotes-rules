@@ -11,4 +11,3 @@
 ## [lang/iac] Secret / 認証情報
 
 - 認証情報 (password / token / API key 等) は Secret Manager から実行時取得する
-- k8s Secret を介した env への直接注入は新規採用しない
