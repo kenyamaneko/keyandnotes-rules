@@ -6,6 +6,7 @@
 
 ## [lang/typescript] テスト方針
 
+- テストは Vitest・`@testing-library/react`・MSW を用いる
 - データ駆動は `it.each` でケース化する
 
 ## [lang/typescript] docs コメント

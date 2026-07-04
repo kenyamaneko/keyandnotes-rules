@@ -8,6 +8,7 @@
 
 ## [lang/python] テスト方針
 
+- テストは pytest を用いる
 - データ駆動は `@pytest.mark.parametrize` でケース化する
 
 ## [lang/python] 命名
