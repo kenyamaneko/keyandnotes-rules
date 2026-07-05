@@ -5,7 +5,7 @@
 - テストランナーは Vitest を用いる (backend / frontend 共通)。React コンポーネント / API モックの方針は testing.md「GUI (画面) のテスト」に従う
 - データ駆動は `it.each` でケース化する
 - テストの命名は testing.md「テストの命名」を次のとおり割り当てる
-  - `describe` = テスト対象の要素 (必要なら Given / When で `describe` を重ねる)
+  - `describe` = テスト対象の要素を日本語で書く (例: `describe("送料計算")`)。必要なら Given / When で `describe` を重ねる
   - `it` = 日本語の自由文で Then まで書く (例: `it("注文金額が3000円のとき、送料は無料になる")`)
   - `it.each` の各ケース名は Given + Then とし、`$値` や `%s` で具体値を埋め込む
 
