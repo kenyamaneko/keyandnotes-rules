@@ -8,6 +8,11 @@
 
 - テストは pytest を用いる
 - データ駆動は `@pytest.mark.parametrize` でケース化する
+- テストの命名は testing.md「テストの命名」を次のとおり割り当てる
+  - テストクラス (またはモジュール) = テスト全体の名前
+  - テスト関数名 = 各ケースの名前。`test_` に続けて日本語で書く
+  - `parametrize` では 1 つの関数が複数のケースを持つため、割り当てを一段ずらす。テスト関数名 = テスト全体の名前とし、各ケースの名前は `pytest.param` の `id` に日本語で書く
+- 日本語の id は既定で `\uXXXX` 形式にエスケープされて読めなくなるため、pytest の設定で `disable_test_id_escaping_and_forfeit_all_rights_to_community_support = True` を設定する
 
 ## [lang/python] 命名
 
