@@ -48,6 +48,10 @@
 
 テストの書き方は @testing.md に従う。
 
+## [base] ドキュメント方針
+
+ドキュメント (ADR・設計文書・README 等) と docs コメントの書き方は @documentation.md に従う。
+
 ## [base] サービス境界
 
 - 各サービスは自身が所有する master data の唯一の SSoT。他サービスから DB 直アクセス禁止、アクセスは所有サービスの API 経由で行う
