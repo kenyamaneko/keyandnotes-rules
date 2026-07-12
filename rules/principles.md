@@ -61,8 +61,15 @@
 
 ## [base] CI方針
 
-- コスト削減のため、新規 GitHub Actions workflow を追加するときは `paths-ignore` / `timeout-minutes` / `concurrency` を必ず設定する
-- 可読性を高めるため、ジョブの各ステップには `name` を付与する
+- コスト削減のため、新規 GitHub Actions workflow には timeout-minutes / concurrency を必ず設定する
+- コスト削減と CI パイプライン実行時間短縮のため push / pull_request トリガーの workflow は、ドキュメントのみの変更ではテスト・ビルドを実行しない。
+  - required status check を使わない workflow の場合
+    - paths-ignore を設定し、ドキュメント修正のみの PR をテストなしでマージできる
+  - required status check を使う workflow の場合
+    - paths-ignore は使わない (トリガー自体が止まり、check 未報告のまま PR がマージ不可になるため)。
+    - 代わりに変更判定ジョブを置き、パイプライン実行不要の差分なら後続 job を needs + if でスキップする。スキップは required check の合格扱いになるため、ドキュメント修正のみの PR をテストなしでマージできる
+- workflow_dispatch / schedule / workflow_call のみの workflow に paths フィルタは適用しない (変更ファイルの概念がないため)
+- 可読性を高めるため、ジョブの各ステップには name を付与する
 
 ## [base] 指示遵守
 
