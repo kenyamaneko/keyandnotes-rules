@@ -4,7 +4,7 @@
 # 「auditor に注入するルール一覧」を手書きリストとして各リポが個別に持つ二重管理を排除する。
 #
 # 不変条件: principles.md が @import する全ファイルは、監査対象リポの hook で注入されるか、
-# さもなくば commit を fail-close する。詳細は docs/adr/001-audit-hook-base-rule-autoinject.md。
+# さもなくば commit を fail-close する。
 
 # principles.md (絶対パス) が @import する参照先の相対パスを、重複なく1行1件で返す。
 kn_discover_base_refs() {
