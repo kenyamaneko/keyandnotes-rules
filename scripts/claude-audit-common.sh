@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
-# pre-commit SOFT audit hook (各リポの .claude/scripts/pre-commit-claude-audit.sh) から source される
-# 共有ロジック。principles.md が @import する base ルールを動的に導出し注入することで、
-# 「auditor に注入するルール一覧」を手書きリストとして各リポが個別に持つ二重管理を排除する。
-#
-# 不変条件: principles.md が @import する全ファイルは、監査対象リポの hook で注入されるか、
-# さもなくば commit を fail-close する。
+# pre-commit SOFT audit hook (各リポの .claude/scripts/pre-commit-claude-audit.sh) から source される。
+# principles.md の @import 一覧を手書きで複製すると更新に追従しない二重管理になるため、動的に導出する。
 
-# principles.md (絶対パス) が @import する参照先の相対パスを、重複なく1行1件で返す。
+# principles.md が @import する参照先を1行1件で返す。
 kn_discover_base_refs() {
   local principles_path="$1"
   grep -oE '@[A-Za-z0-9_./-]+\.md' "$principles_path" | sed 's/^@//' | sort -u
 }
 
-# kn_discover_base_refs の結果から、呼び出し側が明示的に扱っている参照 (第3引数以降) を除いた
-# 「自動注入すべき base-only ルール名」を1行1件で返す。
-# 除外対象は、diff の内容によって適用要否が変わる正当な条件分岐を呼び出し側が既に持つ参照
-# (例: testing.md) に限る。principles_path が存在しない、または参照先ファイルが base_rules_dir に
-# 実在しない場合は stderr にエラーを出し、fail-closed のため非ゼロで終了する。
+# kn_discover_base_refs の結果から exclude_refs (呼び出し側が別途扱う参照) を除いた注入対象を返す。
+# principles_path または参照先ファイルが存在しない場合は fail-closed で非ゼロ終了する。
 kn_auto_inject_refs() {
   local base_rules_dir="$1" principles_path="$2"
   shift 2
