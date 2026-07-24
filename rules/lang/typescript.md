@@ -2,7 +2,10 @@
 
 ## [lang/typescript] テスト方針
 
-- テストランナーは Vitest を用いる (backend / frontend 共通)。React コンポーネント / API モックの方針は testing.md「GUI (画面) のテスト」に従う
+- テストランナーは Vitest を用いる (backend / frontend 共通)
+- GUI テストの原則は testing.md「GUI (画面) のテスト」に従い、次のツールで実装する
+  - React コンポーネントは Testing Library (`@testing-library/react` + `@testing-library/user-event`) で操作する
+  - API 通信のモックは MSW で HTTP 境界 (ネットワーク層) をモックする。api クライアント / モジュールを `vi.mock` 等で直接差し替えない
 - データ駆動は `it.each` でケース化する
 - テストの命名は testing.md「テストの命名」を次のとおり割り当てる
   - `describe` = テスト対象の要素を日本語で書く (例: `describe("送料計算")`)。必要なら Given / When で `describe` を重ねる
