@@ -2,7 +2,7 @@
 
 ## [lang/python] docs コメント
 
-- 関数・メソッド・クラスには Google スタイルの docstring を書く。引数があれば `Args:` セクション、戻り値があれば `Returns:` セクションを必須とする
+- docs コメントは Google スタイルの docstring 形式で書く。`Args:` / `Returns:` セクションは、型から読み取れない情報 (単位・制約・null や省略時の意味・副作用など) がある引数・戻り値にのみ書く
 
 ## [lang/python] テスト方針
 

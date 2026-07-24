@@ -11,7 +11,7 @@
 
 ## [lang/typescript] docs コメント
 
-- 関数・メソッド・クラスには TSDoc (`/** ... */`) を書く。引数があれば各 `@param`、戻り値があれば `@returns` を必須とする
+- docs コメントは TSDoc (`/** ... */`) 形式で書く。`@param` / `@returns` は、型から読み取れない情報 (単位・制約・null や省略時の意味・副作用など) がある引数・戻り値にのみ書く
 
 ## [lang/typescript] 命名
 

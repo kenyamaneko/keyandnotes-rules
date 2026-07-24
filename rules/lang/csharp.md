@@ -30,7 +30,7 @@
 
 ## [lang/csharp] docs コメント
 
-- 型・メソッドには XML doc コメントを書く。`<summary>` を必須とし、戻り値があれば `<returns>`、引数があれば各 `<param>` を必須とする
+- docs コメントは XML doc コメント形式で書き、`<summary>` を書く。`<param>` / `<returns>` は、型から読み取れない情報 (単位・制約・null や省略時の意味・副作用など) がある引数・戻り値にのみ書く
 
 ## [lang/csharp] 命名
 
