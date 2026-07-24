@@ -40,4 +40,4 @@
 
 ## [lang/go] 分岐
 
-- `switch` には必ず `default` 節を書く
+- `switch` には必ず `default` 節を書き、想定外の値としてエラーを返す (または panic する)。空の `default` で無言に通過させない
