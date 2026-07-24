@@ -4,12 +4,15 @@
 
 - 下流で例外を catch せず、handle できる層まで自動伝搬させる
   - 理由: エラーハンドリングを簡潔かつ責務を分離して保守性を高める
-- ASP.NET 系では `app.UseExceptionHandler` を唯一の catch 地点とする
+- ASP.NET 系では原則として `app.UseExceptionHandler` を唯一の catch 地点とする。次の目的の catch は許容する。いずれも例外を握りつぶさず、再試行で回復した場合を除き必ず伝搬させる (ログだけして正常系として続行しない)
+  - 再試行のため
+  - 例外を域内の型に変換する・文脈を付加するため (変換・付加のうえ再送出する)
+  - リソースの後始末のため (後始末のうえ再送出する)
 
 ## [lang/csharp] コーディング方針
 
 - `FirstOrDefault` + silent default を禁止する。契約上存在するなら `First()` または `MustGet` 系を使う
-- `switch` / `if/else` には必ず default を書き、`throw` とする。sentinel 値 (空文字・0・`"?"`) を返さない
+- 値の分類 (enum・種別・状態) に対する分岐では、網羅していない値を `switch` の `default` / 最後の `else` で `throw` する。代用の値 (空文字・0・`"?"`) を返さない
 - 値を返す分岐には switch 式を使い、default アームは `throw`。副作用を伴う分岐には switch 文を使う
 - フィルタ・変換・集計には LINQ を使う。副作用を伴うループには `foreach` 文を使い、`List<T>.ForEach()` は使わない
 

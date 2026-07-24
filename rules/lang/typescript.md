@@ -23,7 +23,8 @@
 
 ## [lang/typescript] 分岐
 
-- `switch` には必ず `default` 節を書く
+- `switch` には必ず `default` 節を書き、想定外の値として throw する。空の `default` で無言に通過させない
+  - ユニオン型の分岐では、値を `never` 型の引数で受ける関数 (assertNever) を `default` で呼び、コンパイル時の網羅性チェックと実行時の早期失敗を両立させる
 
 ## [lang/typescript] 変数宣言
 
