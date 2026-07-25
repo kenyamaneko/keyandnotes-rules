@@ -40,5 +40,7 @@ Key and Notes 各プロジェクト共通のバージョニング・CI規約。`
   - required status check を使う workflow の場合
     - paths-ignore は使わない (トリガー自体が止まり、check 未報告のまま PR がマージ不可になるため)。
     - 代わりに変更判定ジョブを置き、パイプライン実行不要の差分なら後続 job を needs + if でスキップする。スキップは required check の合格扱いになるため、ドキュメント修正のみの PR をテストなしでマージできる
-- workflow_dispatch / schedule / workflow_call のみの workflow に paths フィルタは適用しない (変更ファイルの概念がないため)
+- paths フィルタは、変更ファイルに応じてジョブの要否を判定できない workflow には適用しない
+  - workflow_dispatch / schedule / workflow_call のみの workflow (変更ファイルの概念がないため)
+  - push イベントで tags のみ指定し branches を指定しない workflow (GitHub Actions が評価しないため)
 - 可読性を高めるため、ジョブの各ステップには name を付与する
