@@ -33,7 +33,8 @@ Key and Notes 各プロジェクト共通のバージョニング・CI規約。`
 
 ## CI方針
 
-- コスト削減のため、新規 GitHub Actions workflow には timeout-minutes / concurrency を必ず設定する
+- コスト削減のため、GitHub Actions のジョブには timeout-minutes と concurrency を設定する
+  - timeout-minutes は runs-on を持つジョブに設定する。reusable workflow を呼ぶだけのジョブには設定できない
 - コスト削減と CI パイプライン実行時間短縮のため push / pull_request トリガーの workflow は、ドキュメントのみの変更ではテスト・ビルドを実行しない。
   - required status check を使わない workflow の場合
     - paths-ignore を設定し、ドキュメント修正のみの PR をテストなしでマージできる
