@@ -13,11 +13,11 @@
 - 外部境界 (DB・外部API クライアントなど) のモックは MockK を用いる。suspend 関数は `coEvery` / `coVerify` で扱う
 - データ駆動は `@ParameterizedTest` + `@CsvSource` / `@MethodSource` でケース化する。ケースが1つだけのときは無理に `@ParameterizedTest` 化せず、通常の `@Test` で書く
 - テストの命名は testing.md「テストの命名」を次のとおり割り当てる
-  - テスト対象の要素 = テストクラスの `@DisplayName` に日本語で書く (例: `@DisplayName("送料計算") class ShippingFeeTest`)。クラス名は英語でよく、仕様ドキュメントには出さない
-  - 各ケースの名前 = `@Test` 関数名にバッククォートで日本語の Given+Then を書く (例: `` fun `注文金額が3000円のとき、送料は無料になる`() ``)
-  - 同じ前提のケースが多いときは、`@Nested` の `@DisplayName` に Given を日本語で書いて中間グルーピングにしてよい
-  - `@ParameterizedTest` では `name` にテンプレートで Given+Then を書き、プレースホルダ (`{0}` 等) で具体値を展開する
-  - `[タグ]` はテストクラスの `@DisplayName` に `[タグ] 本体` の形で書く (Kotlin におけるトップレベルグループ)
+  - テスト対象の要素 = 最も外側のテストクラスの `@DisplayName` に日本語で書く (例: `@DisplayName("[注文] 送料計算") class ShippingFeeTest`)。クラス名は英語でよく、仕様ドキュメントには出さない
+  - 各ケースの名前 = `@Test` 関数名にバッククォートで日本語で書く (例: `` fun `注文金額が3000円のとき、送料は無料になる`() ``)
+    - JVM の関数名に使えない記号 (`.` `;` `[` `]` `/` `<` `>` `:` `\`) を含むケース名は書けないため、関数名を英語にして `@DisplayName` にケース名を書く
+  - 中間のグルーピング = `@Nested` クラスの `@DisplayName` に日本語で書く
+  - `@ParameterizedTest` では、関数名にテーブル全体で共有される操作 (When) を書き、`name` にテンプレートで Given + Then を書いてプレースホルダ (`{0}` 等) で具体値を展開する
 
 ## [lang/kotlin] docs コメント
 
