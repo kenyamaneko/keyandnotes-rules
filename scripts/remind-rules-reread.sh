@@ -1,31 +1,28 @@
 #!/usr/bin/env bash
-# 長いセッションでは先頭で読み込んだルールへの注意が薄れるため、ユーザーの発言が一定回数に達するたびに読み直しを促す。
-# UserPromptSubmit から stdin 経由で JSON を受け取り、session_id ごとに発言回数を数える。
+# 先頭で読み込んだルールへの注意は数回のやりとりで薄れるため、ユーザーの発言のたびに読み直しを促し、対話方法の節は本文を添える。
+# UserPromptSubmit から呼ばれ、additionalContext を出力する。
 
 set -uo pipefail
 
-readonly REMIND_INTERVAL=10
-
-input=$(cat)
-session_id=$(printf '%s' "$input" | jq -r '.session_id // ""' 2>/dev/null)
-if [ -z "$session_id" ]; then
-  exit 0
-fi
-
-counter_dir="${TMPDIR:-/tmp}/claude-rules-reread"
-mkdir -p "$counter_dir"
-counter_file="${counter_dir}/${session_id}"
-
-count=$(cat "$counter_file" 2>/dev/null || echo 0)
-count=$((count + 1))
-printf '%s\n' "$count" > "$counter_file"
-
-if [ $((count % REMIND_INTERVAL)) -ne 0 ]; then
-  exit 0
-fi
+readonly DIALOGUE_HEADING='## [base] ユーザーへの報告と質問'
 
 rules_dir="$(cd "$(dirname "$0")/.." && pwd)/rules"
-message="${rules_dir} のうち、次の作業に関係するファイルを Read で読み直してから着手する。"
+principles_file="${rules_dir}/principles.md"
+
+dialogue_section=$(awk -v heading="$DIALOGUE_HEADING" '
+  $0 == heading { in_section = 1; print; next }
+  in_section && /^## / { exit }
+  in_section { print }
+' "$principles_file" 2>/dev/null)
+
+if [ -z "$dialogue_section" ]; then
+  dialogue_section="${principles_file} に見出し「${DIALOGUE_HEADING}」が見つからない。ユーザーにフックの見出し指定の更新が必要だと伝える。"
+fi
+
+message="${rules_dir} のうち、次の作業に関係するファイルを Read で読み直してから着手する。
+ユーザーへの応答は次のルールに従う。
+
+${dialogue_section}"
 jq -nc --arg m "$message" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $m}}'
 
 exit 0
