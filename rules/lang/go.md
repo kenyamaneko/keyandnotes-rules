@@ -25,7 +25,7 @@
 
 ## [lang/go] コード生成
 
-- 型コードは REST 契約 `data/openapi.yaml`・Pub/Sub 契約 `data/asyncapi.yaml` を SSoT とし、`make generate-types` (`scripts/generate_types.sh`) で再生成する
+- 型コードは REST 契約 (OpenAPI 定義) ・Pub/Sub 契約 (AsyncAPI 定義) を SSoT とし、型生成スクリプトで再生成する
 
 ## [lang/go] docs コメント
 
