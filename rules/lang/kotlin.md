@@ -31,7 +31,7 @@
   - 共通の操作 = `@Nested` クラスの `@DisplayName` に日本語で書く
   - 種別 = `@Nested` クラスの `@DisplayName` に種別名 (「単体テスト」「インフラ結合テスト」など) を書く
   - 正常異常 = `@Nested` クラスの `@DisplayName` に「正常系」「異常系」と書く
-  - `@ParameterizedTest` では、関数名にテーブル全体で共有される操作 (When) を書き、`name` にテンプレートで Given + Then を書いてプレースホルダ (`{0}` 等) で具体値を展開する
+  - `@ParameterizedTest` では、`name` にテンプレートで Given + Then を書いてプレースホルダ (`{0}` 等) で具体値を展開する。関数名は英語でよい。テーブル全体で共有される操作 (When) は共通の操作の `@Nested` クラスに書く
 
 ## [lang/kotlin] docs コメント
 
