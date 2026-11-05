@@ -4,7 +4,7 @@
 
 - 本リポ (keyandnotes-rules) の共通ルールは全プロジェクトのベースとして適用される
 - 各リポ固有のルールが共通ルールと重複・衝突する場合は、リポ固有のルールを優先する
-- 共通ルール内では、rules/lang/<lang>.md が coding.md と system-design.md を言語ごとに具体化・上書きする。衝突する場合は lang を優先する
+- 共通ルール内では、rules/lang/<lang>.md が coding.md・system-design.md・testing.md を言語ごとに具体化・上書きする。衝突する場合は lang を優先する
 
 ## [base] コーディング規約
 
