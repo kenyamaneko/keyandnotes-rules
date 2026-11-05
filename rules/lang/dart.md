@@ -26,12 +26,12 @@
 ## [lang/dart] 分岐
 
 - 種別の分岐は列挙か `sealed class` で表し、`switch` で網羅する。`default` や `_` で想定外の値を無言に通さない
-- 網羅できない値 (外部から受け取った文字列など) は外部と直接やり取りするコードで検証し、想定外なら例外を投げる
+- 列挙型や `sealed class` で表せない値 (例: 外部から受け取った配送業者コードの文字列) が想定外なら、`adapter` と `presentation` で例外を投げる
 
 ## [lang/dart] 型と不変性
 
-- ドメインの値は `final` フィールドの不変クラスで表し、更新は `copyWith` で新しい値を返す
-- `dynamic` を使わない。JSON は外部と直接やり取りするコードの中で型付きのクラスに変換し、それ以外のコードに `Map<String, dynamic>` を持ち込まない
+- ドメインの値は `final` フィールドの不変クラスで表し、更新は `copyWith` で新しい値を返す (system-design.md「不変性」の Dart での具体化)
+- `dynamic` を使わない。JSON は `adapter` と `presentation` の中で型付きのクラスに変換し、それ以外のコードに `Map<String, dynamic>` を持ち込まない
 - null 強制 (`!`) を使わない。null になり得ないことを型で表すか、null の場合を分岐で扱う
 
 ## [lang/dart] 静的解析と整形
@@ -41,4 +41,4 @@
 
 ## [lang/dart] 依存の向き
 
-- 業務ロジックは Flutter に依存しない純 Dart パッケージに置き、Flutter・Firebase・プラットフォーム API への依存はアプリ側のアダプタに閉じ込める (coding.md「業務ロジックは外部の具体的な実装に直接依存しない」の Dart での具体化)
+- 業務ロジックは Flutter に依存しない純 Dart パッケージに置き、Flutter・Firebase・プラットフォーム API への依存はアプリ側のアダプタに閉じ込める (system-design.md「SOLID 原則」の依存性逆転の Dart での具体化)
