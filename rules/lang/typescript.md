@@ -25,7 +25,6 @@
 - GUI テストの原則は testing.md「GUI (画面) のテスト」に従い、次のツールで実装する
   - React コンポーネントは Testing Library (`@testing-library/react` + `@testing-library/user-event`) で操作する
   - API 通信のモックは MSW で HTTP 境界 (ネットワーク層) をモックする。api クライアント / モジュールを `vi.mock` 等で直接差し替えない
-- データ駆動は `it.each` でケース化する
 - テストの命名は testing.md「テストの命名」を次のとおり割り当てる
   - `[区分:大機能(:中機能)]小機能` = 最も外側の `describe` (例: `describe("[本体:注文:業務ルール]送料計算")`)
   - ケース = 項目を引数に取る補助関数 (`defineCase`) の呼び出し。補助関数がテスト名を組み立て、項目を Vitest の注釈 (`annotate`) として結果に載せる。Playwright の E2E では、`annotations` に積む。必須の項目は型で必須にする
@@ -33,7 +32,7 @@
     - 複数ステップのケースは、ステップの検証を `steps` の各要素の `Then` に対応させ、本体の中でステップごとに確かめる
     - 注釈のキーは `Given`・`When`・`Then`・`種別`・`正常異常`。ステップは、`Given` (省略可)、`When` (手順の数だけ)、`Then` の順に繰り返して載せる。順序は保たれる
     - なぜ: Vitest と Playwright の JUnit 出力は、注釈を `<property>` として、載せた順に出力する。テストのタグは出力しない
-  - テーブル駆動は、行ごとに `defineCase` を呼ぶ
+  - データ駆動は、行ごとに `defineCase` を呼んでケース化する
   - 注釈はテストの実行中に付くため、スキップしたテストには付かない
 
 ## [lang/typescript] docs コメント
