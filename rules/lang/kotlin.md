@@ -20,10 +20,10 @@
 - 外部境界 (DB・外部API クライアントなど) のモックは MockK を用いる。suspend 関数は `coEvery` / `coVerify` で扱う
 - データ駆動は `@ParameterizedTest` + `@CsvSource` / `@MethodSource` でケース化する。ケースが1つだけのときは無理に `@ParameterizedTest` 化せず、通常の `@Test` で書く
 - テストの命名は testing.md「テストの命名」を次のとおり割り当てる
-  - `[区分:大機能(:中機能)]小機能` = 最も外側のテストクラスの `@DisplayName` (例: `@DisplayName("[本体:注文]送料計算") class ShippingFeeTest`)。クラス名は英語でよく、テスト観点カタログには出さない
+  - `[区分:大機能(:中機能)]小機能` = 最も外側のテストクラスの `@DisplayName` (例: `@DisplayName("[本体:注文]送料計算") class ShippingFeeTest`)。クラス名は英語でよく、テストケースカタログには出さない
   - ケース = `@Test` 関数名 (バッククォートで囲める。例: `` fun `注文金額が3000円のとき、送料を計算すると、送料は無料になる`() ``)
     - JVM の関数名に使えない記号 (`.` `;` `[` `]` `/` `<` `>` `:` `\`) を含むケースは、関数名を英語にして `@DisplayName` にテスト名を書く
-  - ケースの項目 = テスト関数の引数に受け取る `TestReporter` の `publishEntry("Given", "...")`。キーは `Given`・`When`・`Then`・`種別`・`正常異常`。ステップは、`Given` (省略可)、`When` (手順の数だけ)、`Then` の順に繰り返して呼ぶ。項目は JUnit XML の `<property>` に出る。Gradle 9.4.0 以降を用いる
+  - ケースの項目 = テスト関数の引数に受け取る `TestReporter` の `publishEntry("Given", "...")`。キーは `Given`・`When`・`Then`・`種別`・`正常異常`・`観点`。`観点` は省略可で、観点ごとに `publishEntry("観点", "境界値")` を 1 回ずつ呼ぶ。ステップは、`Given` (省略可)、`When` (手順の数だけ)、`Then` の順に繰り返して呼ぶ。項目は JUnit XML の `<property>` に出る。Gradle 9.4.0 以降を用いる
   - `@ParameterizedTest` のケース = `name` のテンプレート (プレースホルダ `{0}` 等で値を展開する)。関数名は英語でよい
 
 ## [lang/kotlin] docs コメント
