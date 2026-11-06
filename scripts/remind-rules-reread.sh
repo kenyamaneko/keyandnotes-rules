@@ -37,6 +37,7 @@ if [ -z "$report_template" ]; then
   report_template="${report_template_file} が読めない。ユーザーにフックの雛形指定の更新が必要だと伝える。"
 fi
 
+# 応答の本文を出す前に止めるフックが無く、草稿の検査を強制できないため、指示で依頼する。
 message="${rules_dir} のうち、次の作業に関係するファイルを Read で読み直してから着手する。
 ユーザーへの応答は次のルールと雛形に従う。
 
