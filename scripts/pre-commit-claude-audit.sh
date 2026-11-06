@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# staged diff を別プロセスの Claude に共通ルールと対象リポのルールで審査させ、違反があれば commit を止める。対象リポのルートを第 1 引数に取る。
+# staged diff を別プロセスの Claude に共通ルールと commit 先リポのルールで審査させ、違反があれば commit を止める。全リポの設定を audit-repos.json に集約し、commit 先のリポは commit するディレクトリから求める。
 
 set -uo pipefail
 
 readonly AUDIT_LOG_DIR="${HOME}/.claude/audit-logs"
 readonly AUDIT_LOG_FILE="${AUDIT_LOG_DIR}/pre-commit-claude-audit.log"
-readonly CONFIG_RELATIVE_PATH=".claude/audit-config.json"
 readonly DIFF_CONTEXT_LINES=10
+readonly DEFAULT_OVERLAY_DIR="rules"
 
 # 頻繁に走るため、速度と推論のバランスで sonnet を使う。
 readonly AUDITOR_MODEL="claude-sonnet-5"
@@ -21,6 +21,10 @@ SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly SHARED_REPO_DIR
 readonly BASE_RULES="${SHARED_REPO_DIR}/rules"
 readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/claude-audit-common.sh"
+readonly REPOS_CONFIG_FILE="${SHARED_REPO_DIR}/scripts/audit-repos.json"
+
+# shellcheck source=/dev/null
+source "$COMMON_LIB" || { printf '⚠️  pre-commit-claude-audit: 共有ロジック (%s) を読み込めない。監査不能のため fail-safe で commit ブロック。\n' "$COMMON_LIB" >&2; exit 2; }
 
 readonly AUDIT_SCHEMA='{
   "type": "object",
@@ -78,49 +82,15 @@ reject_staging_with_commit() {
   fi
 }
 
-# commit の書き方 (git -C / cd / 素の commit) によらず、commit 先のディレクトリを求める。
-resolve_commit_dir() {
-  local cmd="$1" input="$2" dir before_commit
-  dir=$(printf '%s' "$cmd" | grep -oE 'git[[:space:]]+-C[[:space:]]+"?[^"&|;[:space:]]+' | head -1 | sed -E 's|^git[[:space:]]+-C[[:space:]]+"?||')
-  if [ -z "$dir" ]; then
-    before_commit=$(printf '%s' "$cmd" | sed -E 's/git[[:space:]]+commit.*//')
-    dir=$(printf '%s' "$before_commit" | grep -oE '(^|[&|;[:space:]])cd[[:space:]]+"?[^"&|;[:space:]]+' | tail -1 | sed -E 's|.*cd[[:space:]]+"?||')
-  fi
-  [ -z "$dir" ] && dir=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null)
-  [ -z "$dir" ] && dir=$(pwd)
-  printf '%s' "$dir"
-}
-
-absolute_git_common_dir() {
-  (cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-}
-
-# commit 先の registry 上のリポ名・言語・前提ドキュメントを JSON で返す。worktree はチェックアウト場所に規則性がないため、共通 .git の親も照合候補に加える。
-resolve_fleet_repo() {
-  local registry="$1" commit_dir="$2" main_worktree_root="$3"
-  python3 - "$expected_repo_root" "$registry" "$commit_dir" "$main_worktree_root" <<'PY'
-import sys, os, json, yaml
-repo_root, registry, commit_dir, main_worktree_root = sys.argv[1:5]
-with open(os.path.join(repo_root, registry)) as f:
-    data = yaml.safe_load(f)
-candidates = {os.path.realpath(commit_dir), os.path.realpath(main_worktree_root)}
-for r in data.get("repos", []):
-    if os.path.realpath(os.path.join(repo_root, r["path"])) in candidates:
-        print(json.dumps({"name": r["name"], "lang": r.get("lang", "none"), "prereq_docs": r.get("prereq_docs", [])}))
-        break
-PY
-}
-
-# 注入するルールを 1 行 1 件で返す。列は、ルール名・overlay 名・全面置換か・注入対象か (staged のファイル名と言語が条件に合うか)。
+# 注入するルールを 1 行 1 件で返す。列は、ルール名・overlay 名・全面置換か・注入対象か (staged のファイル名が条件に合うか)。
 plan_rules() {
-  jq -r --argjson auto "$auto_refs_json" --argjson names "$staged_names_json" --arg lang "$fleet_lang" '
+  jq -r --argjson auto "$auto_refs_json" --argjson names "$staged_names_json" '
     .rules as $configured
     | (([{rule: "principles.md"}] + ($auto | map({rule: .}))) | map(select(.rule as $r | $configured | all(.rule != $r)))) + $configured
     | .[]
     | (.files // null) as $files
-    | (.lang // null) as $entry_lang
     | [.rule, (.overlay // .rule), (.replace // false),
-       ((($files == null) or ($names | any(test($files)))) and ($entry_lang == null or $entry_lang == $lang))]
+       (($files == null) or ($names | any(test($files))))]
     | @tsv' "$config_file"
 }
 
@@ -170,7 +140,7 @@ HEADER
     IFS='|' read -r rel overlay_name replace <<< "$entry"
     emit_rule "$rel" "$overlay_name" "$replace"
   done
-  for doc in ${fleet_docs[@]+"${fleet_docs[@]}"}; do
+  for doc in ${extra_docs[@]+"${extra_docs[@]}"}; do
     printf '\n\n## %s\n' "$doc"
     cat "${expected_repo_root}/${doc}"
   done
@@ -246,10 +216,6 @@ emit_decision() {
 err_file=$(mktemp)
 trap 'rm -f "$err_file"' EXIT
 
-expected_repo_root="${1:-}"
-[ -z "$expected_repo_root" ] && fail_closed '対象リポのルートが第 1 引数に渡されていない。'
-expected_repo_root=$(cd "$expected_repo_root" 2>/dev/null && pwd -P) || fail_closed "対象リポのルート (${1}) が開けない。"
-
 input=$(cat)
 [ -z "$input" ] && fail_closed '空入力で起動。'
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null) || fail_closed 'JSON parse 失敗。'
@@ -260,33 +226,34 @@ printf '%s' "$exec_cmd" | grep -qE '(^|[[:space:]&|;`(])git[[:space:]]+commit' |
 printf '%s' "$exec_cmd" | grep -qE 'git[[:space:]]+commit[[:space:]]+(--help|-h)([[:space:]]|$)' && exit 0
 reject_staging_with_commit "$exec_cmd"
 
-commit_dir=$(resolve_commit_dir "$cmd" "$input")
+commit_dir=$(kn_resolve_commit_dir "$cmd" "$input")
 cd "$commit_dir" 2>/dev/null || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
-config_file="${expected_repo_root}/${CONFIG_RELATIVE_PATH}"
-is_fleet=false
-if [ -f "$config_file" ] && [ "$(jq -r 'has("fleet")' "$config_file" 2>/dev/null)" = "true" ]; then
-  is_fleet=true
-fi
+expected_repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail_closed "commit 先 (${commit_dir}) のリポのルートを求められない。"
+repo_name=$(kn_repo_name "$commit_dir")
 
-# 対象リポ (その worktree を含む) 以外の commit にこのリポのルールを当てないため、監査しない。fleet は commit 先を registry から求める。
-if [ "$is_fleet" = false ] && [ "$(absolute_git_common_dir "$commit_dir")" != "$(absolute_git_common_dir "$expected_repo_root")" ]; then
-  exit 0
-fi
+[ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
+kn_is_excluded_repo "$REPOS_CONFIG_FILE" "$repo_name" && exit 0
+repo_entry=$(jq -c --arg name "$repo_name" '.repos[$name] // empty' "$REPOS_CONFIG_FILE" 2>/dev/null) \
+  || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) を JSON として読めない。"
+[ -n "$repo_entry" ] || fail_closed "リポ ${repo_name} の設定が ${REPOS_CONFIG_FILE} に無い。監査する場合は rules を、監査しない場合は {\"excluded\": true} を書いて追加してください。"
 
-[ -f "$config_file" ] || fail_closed "設定 (${config_file}) が見つからない。"
+# 検証と各所の jq が同じ入力を読めるよう、リポの設定を一時ファイルに書き出す。
+config_file=$(mktemp)
+trap 'rm -f "$err_file" "$config_file"' EXIT
+printf '%s' "$repo_entry" > "$config_file"
+
 config_valid=$(jq -r '
-  (.name | type == "string" and length > 0)
-  and (.rules | type == "array") and all(.rules[]; .rule | type == "string")
+  (.rules | type == "array") and all(.rules[]; .rule | type == "string")
   and (.exempt_overlays | type == "array")
   and (.exclude_pathspecs | type == "array")
-  and (if has("fleet") then (.fleet.registry | type == "string") and (.fleet.extra_docs | type == "array") else true end)
+  and (.extra_docs | type == "array")
+  and (.overlay_dir | type == "string")
 ' "$config_file" 2>/dev/null)
-[ "$config_valid" = "true" ] || fail_closed "設定 (${config_file}) の形式が不正。name / rules / exempt_overlays / exclude_pathspecs が必要。fleet を使うときは fleet.registry と fleet.extra_docs も必要。"
+[ "$config_valid" = "true" ] || fail_closed "リポ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の形式が不正。rules / exempt_overlays / exclude_pathspecs / extra_docs / overlay_dir が必要。"
 
-repo_name=$(jq -r '.name' "$config_file")
-OVERLAY_RULES="${expected_repo_root}/rules"
+OVERLAY_RULES="${expected_repo_root}/$(jq -r '.overlay_dir' "$config_file")"
 
 exclude_pathspecs=()
 while IFS= read -r pathspec; do
@@ -302,24 +269,12 @@ while IFS= read -r file; do
   [ -n "$file" ] && staged_files+=("$file")
 done <<< "$staged_names"
 
-fleet_lang=""
-fleet_docs=()
-if [ "$is_fleet" = true ]; then
-  fleet_registry=$(jq -r '.fleet.registry' "$config_file")
-  main_worktree_root="$(dirname "$(absolute_git_common_dir "$commit_dir")")"
-  fleet_repo=$(resolve_fleet_repo "$fleet_registry" "$commit_dir" "$main_worktree_root")
-  [ -n "$fleet_repo" ] || fail_closed "commit 対象リポ (${main_worktree_root}) が ${fleet_registry} に未登録のため解決不能。登録が必要な場合は ${fleet_registry} への追記を人間に提案してください (Claude は rules/ 配下を書き換えない)。"
-  repo_name=$(printf '%s' "$fleet_repo" | jq -r '.name')
-  fleet_lang=$(printf '%s' "$fleet_repo" | jq -r '.lang')
-  while IFS= read -r doc; do
-    [ -f "${expected_repo_root}/${doc}" ] && fleet_docs+=("$doc")
-  done < <(jq -r --argjson repo "$fleet_repo" '.fleet.extra_docs[], $repo.prereq_docs[]' "$config_file")
-fi
-
-# principles.md の @import 一覧を手書きで複製すると更新に追従しないため、動的に導出する。
-[ -f "$COMMON_LIB" ] || fail_closed "共有ロジック (${COMMON_LIB}) が見つからない。"
-# shellcheck source=/dev/null
-source "$COMMON_LIB"
+extra_docs=()
+while IFS= read -r doc; do
+  [ -z "$doc" ] && continue
+  [ -f "${expected_repo_root}/${doc}" ] || fail_closed "リポ ${repo_name} の前提ドキュメント ${doc} が見つからない。"
+  extra_docs+=("$doc")
+done < <(jq -r '.extra_docs[]' "$config_file")
 
 configured_rule_names=()
 while IFS= read -r rule_name; do
@@ -354,7 +309,7 @@ while IFS= read -r overlay_file; do
   rel="${overlay_file#"${OVERLAY_RULES}/"}"
   jq -e --arg p "$rel" '.exempt_overlays | index($p) != null' "$config_file" >/dev/null && continue
   printf '%s\n' "$covered_overlays" | grep -qxF -- "$rel" \
-    || fail_closed "overlay rules/${rel} が監査に注入されない。.claude/audit-config.json の rules に追加する (ルールでなければ exempt_overlays に追加する)。"
+    || fail_closed "overlay rules/${rel} が監査に注入されない。全リポの設定 (audit-repos.json) の rules に追加する (ルールでなければ exempt_overlays に追加する)。"
 done < <(find "$OVERLAY_RULES" -type f -name '*.md' 2>/dev/null)
 
 rules_bytes=$(build_prompt "" | wc -c | tr -d ' ')
