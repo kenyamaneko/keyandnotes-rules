@@ -65,6 +65,18 @@ is_passed_message() {
   grep -qxF -- "$message_hash" "${READ_LOG_DIR}/${session_id}.passed" 2>/dev/null
 }
 
+# 画面に出さなかった報告を Stop フックが再び検査せずに差し戻せるよう、違反の指摘を報告のハッシュごとに残す。
+save_review_reasons() {
+  local session_id="$1" message_hash="$2" reasons="$3"
+  mkdir -p "$READ_LOG_DIR"
+  printf '%s' "$reasons" > "${READ_LOG_DIR}/${session_id}.reasons.${message_hash}"
+}
+
+load_review_reasons() {
+  local session_id="$1" message_hash="$2"
+  cat "${READ_LOG_DIR}/${session_id}.reasons.${message_hash}" 2>/dev/null
+}
+
 list_unread_rule_files() {
   local session_id="$1" prompt_id="$2"
   local log_file="${READ_LOG_DIR}/${session_id}.tsv"

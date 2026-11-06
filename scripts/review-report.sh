@@ -23,7 +23,7 @@ main() {
     return 0
   fi
 
-  local input message session_id prompt_id
+  local input message session_id prompt_id message_hash
   input=$(cat)
   message=$(printf '%s' "$input" | jq -r '.last_assistant_message')
 
@@ -34,7 +34,8 @@ main() {
   session_id=$(printf '%s' "$input" | jq -r '.session_id')
   prompt_id=$(printf '%s' "$input" | jq -r '.prompt_id')
 
-  if is_passed_message "$session_id" "$(hash_message "$message")"; then
+  message_hash=$(hash_message "$message")
+  if is_passed_message "$session_id" "$message_hash"; then
     return 0
   fi
 
@@ -45,8 +46,12 @@ main() {
 
   local reasons review_status error_file
   error_file=$(mktemp)
-  reasons=$(review_message "$message" "$session_id" "$prompt_id" 2>"$error_file")
-  review_status=$?
+  reasons=$(load_review_reasons "$session_id" "$message_hash")
+  review_status=0
+  if [ -z "$reasons" ]; then
+    reasons=$(review_message "$message" "$session_id" "$prompt_id" 2>"$error_file")
+    review_status=$?
+  fi
 
   if [ "$review_status" -ne 0 ]; then
     emit_block "$(cat "$error_file")" "$session_id" "$prompt_id"
