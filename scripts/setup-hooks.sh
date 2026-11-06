@@ -6,13 +6,15 @@ set -euo pipefail
 readonly DEFAULT_SETTINGS_FILE="${HOME}/.claude/settings.json"
 readonly REVIEW_REPORT_TIMEOUT_SECONDS=180
 
-scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# worktree から実行しても、worktree を消したときにフックが壊れないよう、登録するパスは本体のチェックアウトにする。
+git_common_dir="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --path-format=absolute --git-common-dir)"
+scripts_dir="$(dirname "$git_common_dir")/scripts"
 settings_file="${1:-$DEFAULT_SETTINGS_FILE}"
 
 mkdir -p "$(dirname "$settings_file")"
 [ -f "$settings_file" ] || printf '{}\n' > "$settings_file"
 
-# スクリプトの追加・変更・名前の変更・削除を再実行だけで取り込めるよう、このリポのスクリプトを指す登録をすべて取り除いてから、現在の内容で登録する。
+# スクリプトの変更を取り込めるよう、2 回目以降の実行では上書きする。
 registered=$(jq \
   --arg dir "${scripts_dir}/" \
   --arg remind "${scripts_dir}/remind-rules-reread.sh" \
@@ -23,13 +25,12 @@ registered=$(jq \
     .hooks[$event] = ((.hooks[$event] // []) + [$entry]);
   .hooks = (
     (.hooks // {})
-    | map_values(map(.hooks |= map(select(.command | startswith($dir) | not))) | map(select(.hooks | length > 0)))
+    | map_values(map(.hooks |= map(select((.command // "") | startswith($dir) | not))) | map(select(.hooks | length > 0)))
     | with_entries(select(.value | length > 0)))
   | register("UserPromptSubmit"; {hooks: [{type: "command", command: $remind}]})
   | register("Stop"; {hooks: [{type: "command", command: $review, timeout: $review_timeout}]})
   | register("PostToolUse"; {matcher: "Read", hooks: [{type: "command", command: $record}]})
 ' "$settings_file")
 
-printf '%s\n' "$registered" > "${settings_file}.tmp"
-mv "${settings_file}.tmp" "$settings_file"
+printf '%s\n' "$registered" > "$settings_file"
 printf 'フックを登録した: %s\n' "$settings_file"
