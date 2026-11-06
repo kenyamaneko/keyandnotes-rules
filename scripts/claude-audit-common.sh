@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-commit SOFT audit hook (各リポの .claude/scripts/pre-commit-claude-audit.sh) から source される。
+# pre-commit SOFT audit hook (scripts/pre-commit-claude-audit.sh) から source される。
 # principles.md の @import 一覧を手書きで複製すると更新に追従しない二重管理になるため、動的に導出する。
 
 # principles.md が @import する参照先を1行1件で返す。
