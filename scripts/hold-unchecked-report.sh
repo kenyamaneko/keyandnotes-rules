@@ -67,6 +67,7 @@ main() {
     emit_display < "$buffer_file"
   else
     save_review_reasons "$session_id" "$message_hash" "$reasons"
+    # Stop フックの差し戻し理由の表示は隠せず、隠せるのは報告の本文だけのため、報告だけを画面から隠す。
     printf '%s' "$HIDDEN_NOTICE" | emit_display
   fi
   rm -f "$buffer_file"
