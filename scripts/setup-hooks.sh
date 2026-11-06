@@ -20,6 +20,7 @@ registered=$(jq \
   --arg remind "${scripts_dir}/remind-rules-reread.sh" \
   --arg review "${scripts_dir}/review-report.sh" \
   --arg record "${scripts_dir}/record-rules-read.sh" \
+  --arg hold "${scripts_dir}/hold-unchecked-report.sh" \
   --argjson review_timeout "$REVIEW_REPORT_TIMEOUT_SECONDS" '
   def register($event; $entry):
     .hooks[$event] = ((.hooks[$event] // []) + [$entry]);
@@ -29,6 +30,7 @@ registered=$(jq \
     | with_entries(select(.value | length > 0)))
   | register("UserPromptSubmit"; {hooks: [{type: "command", command: $remind}]})
   | register("Stop"; {hooks: [{type: "command", command: $review, timeout: $review_timeout}]})
+  | register("MessageDisplay"; {hooks: [{type: "command", command: $hold, timeout: $review_timeout}]})
   | register("PostToolUse"; {matcher: "Read", hooks: [{type: "command", command: $record}]})
 ' "$settings_file")
 
