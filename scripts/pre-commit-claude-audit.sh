@@ -71,17 +71,6 @@ reject_command() {
   exit 2
 }
 
-# 実行前の hook からは、同じコマンドで git add してから commit する場合のステージ内容が見えず、無審査で commit が通るため、ステージ操作と commit の同居を拒否する。
-reject_staging_with_commit() {
-  local exec_cmd="$1"
-  if printf '%s' "$exec_cmd" | grep -qE '(^|[[:space:]&|;`(])git[[:space:]]+(add|rm|mv)([[:space:]]|$)'; then
-    reject_command 'git add/rm/mv と git commit が同一 Bash 呼び出しに含まれています。別の Bash 呼び出しに分けてから commit してください。'
-  fi
-  if printf '%s' "$exec_cmd" | grep -qE 'git[[:space:]]+commit[[:space:]]+(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:]]|=|$)'; then
-    reject_command 'git commit -a/-am/--all は commit 自体がステージ操作を兼ねます。git add で明示的にステージしてから commit してください。'
-  fi
-}
-
 # 注入するルールを 1 行 1 件で返す。列は、ルール名・overlay 名・全面置換か・注入対象か (staged のファイル名が条件に合うか)。
 plan_rules() {
   jq -r --argjson auto "$auto_refs_json" --argjson names "$staged_names_json" '
@@ -220,18 +209,18 @@ input=$(cat)
 [ -z "$input" ] && fail_closed '空入力で起動。'
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null) || fail_closed 'JSON parse 失敗。'
 
-# 文字列リテラルや HEREDOC 内の偶発マッチを避けるため、実行される部分だけを取り出す。
-exec_cmd=$(printf '%s' "$cmd" | sed -E '/<</q' | sed -E 's/"[^"]*"//g; s/'\''[^'\'']*'\''//g')
-printf '%s' "$exec_cmd" | grep -qE '(^|[[:space:]&|;`(])git[[:space:]]+commit' || exit 0
-printf '%s' "$exec_cmd" | grep -qE 'git[[:space:]]+commit[[:space:]]+(--help|-h)([[:space:]]|$)' && exit 0
-reject_staging_with_commit "$exec_cmd"
+exec_cmd=$(kn_extract_exec_cmd "$cmd")
+kn_is_commit_command "$exec_cmd" || exit 0
+# 実行前の hook からは、同じコマンドでステージしてから commit する場合のステージ内容が見えず、無審査で commit が通るため、ステージ操作と commit の同居を拒否する。
+staging_message=$(kn_find_staging_with_commit "$exec_cmd") && reject_command "$staging_message"
 
 commit_dir=$(kn_resolve_commit_dir "$cmd" "$input")
 cd "$commit_dir" 2>/dev/null || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
-expected_repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail_closed "commit 先 (${commit_dir}) のリポのルートを求められない。"
 repo_name=$(kn_repo_name "$commit_dir")
+# 子リポは本体のチェックアウトの隣にある別リポの overlay と前提ドキュメントを参照するため、worktree でなく本体のチェックアウトを基準にする。
+expected_repo_root=$(kn_main_checkout_root "$commit_dir") || fail_closed "commit 先 (${commit_dir}) の本体のチェックアウトを求められない。"
 
 [ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
 kn_is_excluded_repo "$REPOS_CONFIG_FILE" "$repo_name" && exit 0

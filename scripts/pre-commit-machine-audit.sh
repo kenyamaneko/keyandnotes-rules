@@ -26,10 +26,8 @@ input=$(cat)
 [ -z "$input" ] && fail_closed '空入力で起動。'
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null) || fail_closed 'JSON parse 失敗。'
 
-# 文字列リテラルや HEREDOC 内の偶発マッチを避けるため、実行される部分だけを取り出す。
-exec_cmd=$(printf '%s' "$cmd" | sed -E '/<</q' | sed -E 's/"[^"]*"//g; s/'\''[^'\'']*'\''//g')
-printf '%s' "$exec_cmd" | grep -qE '(^|[[:space:]&|;`(])git[[:space:]]+commit' || exit 0
-printf '%s' "$exec_cmd" | grep -qE 'git[[:space:]]+commit[[:space:]]+(--help|-h)([[:space:]]|$)' && exit 0
+exec_cmd=$(kn_extract_exec_cmd "$cmd")
+kn_is_commit_command "$exec_cmd" || exit 0
 
 target_cwd=$(kn_resolve_commit_dir "$cmd" "$input")
 cd "$target_cwd" 2>/dev/null || exit 0

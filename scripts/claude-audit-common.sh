@@ -2,6 +2,36 @@
 # commit 前の監査フック (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh) から source される。
 # 複数のフックが同じ判断をするため、commit 先の解決と、principles.md の @import 一覧の導出をここに置く。
 
+# git と副コマンドの間に置ける -C <dir>・-c <key=value> (引数は quote を消した後に空になりうる)。
+readonly KN_GIT_GLOBAL_OPTS='([[:space:]]+-[Cc]([[:space:]]+[^[:space:]]+)?)*'
+
+# 文字列リテラルや HEREDOC 内の偶発マッチを避けるため、コマンドのうち実行される部分だけを返す。
+kn_extract_exec_cmd() {
+  printf '%s' "$1" | sed -E '/<</q' | sed -E 's/"[^"]*"//g; s/'\''[^'\'']*'\''//g'
+}
+
+# 実行される部分が git commit なら 0 を返す。git commit --help・-h は commit しないため含めない。
+kn_is_commit_command() {
+  printf '%s' "$1" | grep -qE "(^|[[:space:]&|;\`(])git${KN_GIT_GLOBAL_OPTS}[[:space:]]+commit([[:space:]]|\$)" || return 1
+  ! printf '%s' "$1" | grep -qE "git${KN_GIT_GLOBAL_OPTS}[[:space:]]+commit[[:space:]]+(--help|-h)([[:space:]]|\$)"
+}
+
+# 実行される部分に、index を書き換える git の操作が commit と同居していれば、その説明を返して 0 を返す。
+kn_find_staging_with_commit() {
+  local exec_cmd="$1" git_cmd="(^|[[:space:]&|;\`(])git${KN_GIT_GLOBAL_OPTS}[[:space:]]+"
+  if printf '%s' "$exec_cmd" | grep -qE "${git_cmd}(add|rm|mv)([[:space:]]|\$)"; then
+    printf 'git add/rm/mv と git commit が同一 Bash 呼び出しに含まれています。別の Bash 呼び出しに分けてから commit してください。'
+  elif printf '%s' "$exec_cmd" | grep -qE "${git_cmd}checkout[[:space:]].*[[:space:]]--[[:space:]]"; then
+    printf 'git checkout <ref> -- <path> は index を書き換えます。別の Bash 呼び出しに分けてから commit してください。'
+  elif printf '%s' "$exec_cmd" | grep -qE "${git_cmd}restore[[:space:]].*--staged"; then
+    printf 'git restore --staged は index を書き換えます。別の Bash 呼び出しに分けてから commit してください。'
+  elif printf '%s' "$exec_cmd" | grep -qE "git${KN_GIT_GLOBAL_OPTS}[[:space:]]+commit[[:space:]]+([^;&|]*[[:space:]])?(--all|--include|--patch|-[A-Za-z]*[aip][A-Za-z]*)([[:space:]=]|\$)"; then
+    printf 'git commit の -a/--all/-i/--include/-p/--patch は commit 自体がステージ操作を兼ねます。git add で明示的にステージしてから commit してください。'
+  else
+    return 1
+  fi
+}
+
 # commit の書き方 (git -C / cd / 素の commit) によらず、commit 先のディレクトリを求める。
 kn_resolve_commit_dir() {
   local cmd="$1" input="$2" dir before_commit
@@ -15,11 +45,16 @@ kn_resolve_commit_dir() {
   printf '%s' "$dir"
 }
 
-# 指定したディレクトリが属するリポの名前を返す。worktree は本体のディレクトリ名になる。
-kn_repo_name() {
+# 指定したディレクトリが属するリポの本体のチェックアウト (worktree の場合は本体) のルートを返す。
+kn_main_checkout_root() {
   local common_dir
   common_dir=$(cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
-  basename "$(dirname "$common_dir")"
+  dirname "$common_dir"
+}
+
+# 指定したディレクトリが属するリポの名前を返す。worktree は本体のディレクトリ名になる。
+kn_repo_name() {
+  basename "$(kn_main_checkout_root "$1")"
 }
 
 # 全リポの設定で監査対象外と明示したリポなら 0 を返す。
