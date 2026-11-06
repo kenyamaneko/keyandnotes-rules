@@ -85,7 +85,8 @@ kn_auto_inject_refs() {
   while IFS= read -r ref; do
     [ -z "$ref" ] && continue
     skip=0
-    for ex in "${exclude_refs[@]}"; do
+    # 空配列の展開は bash 3.2 の set -u でエラーになるため、要素があるときだけ展開する。
+    for ex in ${exclude_refs[@]+"${exclude_refs[@]}"}; do
       [ "$ex" = "$ref" ] && { skip=1; break; }
     done
     [ "$skip" -eq 1 ] && continue

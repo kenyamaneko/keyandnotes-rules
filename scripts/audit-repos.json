@@ -19,7 +19,11 @@
       "exclude_pathspecs": []
     },
     "keyandnotes-rules": {
-      "excluded": true
+      "overlay_dir": null,
+      "extra_docs": [],
+      "rules": [],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
     },
     "keyandnotes-tools": {
       "overlay_dir": "rules",

@@ -83,6 +83,11 @@ plan_rules() {
     | @tsv' "$config_file"
 }
 
+# overlay_dir が null のリポ (共通ルールそのものを置くリポ) には overlay が無い。
+overlay_exists() {
+  [ -n "$OVERLAY_RULES" ] && [ -f "${OVERLAY_RULES}/$1" ]
+}
+
 # 同じ相対パスの base と overlay を必ず対で出し、overlay の注入漏れを防ぐ。
 emit_rule() {
   local rel="$1" overlay_name="$2" replace="$3"
@@ -95,7 +100,7 @@ emit_rule() {
   fi
   printf '\n\n## [base] rules/%s\n' "$rel"
   cat "$base"
-  if [ -f "$overlay" ]; then
+  if overlay_exists "$overlay_name"; then
     printf '\n\n## [overlay/%s] rules/%s (base と衝突する場合はこちらを優先)\n' "$repo_name" "$overlay_name"
     cat "$overlay"
   fi
@@ -238,11 +243,13 @@ config_valid=$(jq -r '
   and (.exempt_overlays | type == "array")
   and (.exclude_pathspecs | type == "array")
   and (.extra_docs | type == "array")
-  and (.overlay_dir | type == "string")
+  and (.overlay_dir | type == "string" or . == null)
 ' "$config_file" 2>/dev/null)
 [ "$config_valid" = "true" ] || fail_closed "リポ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の形式が不正。rules / exempt_overlays / exclude_pathspecs / extra_docs / overlay_dir が必要。"
 
-OVERLAY_RULES="${expected_repo_root}/$(jq -r '.overlay_dir' "$config_file")"
+overlay_dir=$(jq -r '.overlay_dir // ""' "$config_file")
+OVERLAY_RULES=""
+[ -n "$overlay_dir" ] && OVERLAY_RULES="${expected_repo_root}/${overlay_dir}"
 
 exclude_pathspecs=()
 while IFS= read -r pathspec; do
@@ -283,10 +290,10 @@ while IFS=$'\t' read -r rel overlay_name replace active; do
   [ -z "$rel" ] && continue
   covered_overlays="${covered_overlays}"$'\n'"${overlay_name}"
   if [ "$replace" = "true" ]; then
-    [ -f "${OVERLAY_RULES}/${overlay_name}" ] || fail_closed "${repo_name} の overlay rules/${overlay_name} が見つからず、共通 ${rel} を置き換えられない。"
+    overlay_exists "$overlay_name" || fail_closed "${repo_name} の overlay rules/${overlay_name} が見つからず、共通 ${rel} を置き換えられない。"
   else
     [ -f "${BASE_RULES}/${rel}" ] || fail_closed "共通ルール rules/${rel} が見つからず実効ルール集を構成できない。"
-    if [ "$overlay_name" != "$rel" ] && [ ! -f "${OVERLAY_RULES}/${overlay_name}" ]; then
+    if [ "$overlay_name" != "$rel" ] && ! overlay_exists "$overlay_name"; then
       fail_closed "${repo_name} の overlay rules/${overlay_name} が見つからず実効ルール集を構成できない。"
     fi
   fi
@@ -299,7 +306,7 @@ while IFS= read -r overlay_file; do
   jq -e --arg p "$rel" '.exempt_overlays | index($p) != null' "$config_file" >/dev/null && continue
   printf '%s\n' "$covered_overlays" | grep -qxF -- "$rel" \
     || fail_closed "overlay rules/${rel} が監査に注入されない。全リポの設定 (audit-repos.json) の rules に追加する (ルールでなければ exempt_overlays に追加する)。"
-done < <(find "$OVERLAY_RULES" -type f -name '*.md' 2>/dev/null)
+done < <([ -n "$OVERLAY_RULES" ] && find "$OVERLAY_RULES" -type f -name '*.md' 2>/dev/null)
 
 rules_bytes=$(build_prompt "" | wc -c | tr -d ' ')
 diff_budget=$(( MAX_PROMPT_BYTES - rules_bytes ))
