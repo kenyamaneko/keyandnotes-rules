@@ -23,6 +23,7 @@ registered=$(jq \
   --arg guard "${scripts_dir}/guard-rules-edit.sh" \
   --arg machine_audit "${scripts_dir}/pre-commit-machine-audit.sh" \
   --arg claude_audit "${scripts_dir}/pre-commit-claude-audit.sh" \
+  --arg hold "${scripts_dir}/hold-unchecked-report.sh" \
   --argjson review_timeout "$REVIEW_REPORT_TIMEOUT_SECONDS" '
   def register($event; $entry):
     .hooks[$event] = ((.hooks[$event] // []) + [$entry]);
@@ -32,6 +33,7 @@ registered=$(jq \
     | with_entries(select(.value | length > 0)))
   | register("UserPromptSubmit"; {hooks: [{type: "command", command: $remind}]})
   | register("Stop"; {hooks: [{type: "command", command: $review, timeout: $review_timeout}]})
+  | register("MessageDisplay"; {hooks: [{type: "command", command: $hold, timeout: $review_timeout}]})
   | register("PostToolUse"; {matcher: "Read", hooks: [{type: "command", command: $record}]})
   | register("PreToolUse"; {matcher: "Edit|Write", hooks: [{type: "command", command: $guard}]})
   | register("PreToolUse"; {matcher: "Bash", hooks: [{type: "command", command: $machine_audit}, {type: "command", command: $claude_audit}]})
