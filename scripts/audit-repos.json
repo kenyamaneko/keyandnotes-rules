@@ -1,0 +1,581 @@
+{
+  "repos": {
+    "api-data": {
+      "excluded": true
+    },
+    "damage-calc": {
+      "excluded": true
+    },
+    "keyandnotes-platform": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "lang/iac.md",
+          "files": "\\.tf$"
+        }
+      ],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "keyandnotes-rules": {
+      "overlay_dir": null,
+      "extra_docs": [],
+      "rules": [],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "keyandnotes-tools": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "mimicopick": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "\\.(test|spec)\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/typescript.md",
+          "files": "\\.(ts|tsx)$"
+        }
+      ],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "overload-party-account": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-analytics": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-assets": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-battle": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md",
+        "../overload-party-common/docs/game_design/RULEBOOK.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/csharp.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-card": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-client": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/typescript.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-common": {
+      "overlay_dir": "rules",
+      "extra_docs": [
+        "docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/python.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-e2e": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/typescript.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-gateway": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-infra": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/iac.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-k8s": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/iac.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-matchmaking": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-news": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-newsfeed": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/python.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-ops": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/python.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-scenario": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-shop": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "overload-party-support": {
+      "overlay_dir": "../overload-party-common/rules",
+      "extra_docs": [
+        "../overload-party-common/docs/game_design/GLOSSARY.md"
+      ],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/go.md"
+        }
+      ],
+      "exempt_overlays": [
+        "lang/iac.md",
+        "lang/typescript.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "pbwrompter": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "(^|/)test_[^/]*\\.py$|_test\\.py$"
+        },
+        {
+          "rule": "lang/python.md",
+          "files": "\\.py$"
+        },
+        {
+          "rule": "lang/iac.md",
+          "files": "\\.tf$"
+        }
+      ],
+      "exempt_overlays": [
+        "flow.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "pokelingual": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "\\.(test|spec)\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/typescript.md",
+          "files": "\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/iac.md",
+          "files": "\\.tf$"
+        },
+        {
+          "rule": "lang/python.md",
+          "files": "\\.py$"
+        }
+      ],
+      "exempt_overlays": [
+        "flow.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "rehamo-telemetry": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "\\.(test|spec)\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/typescript.md",
+          "files": "\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/iac.md",
+          "files": "\\.tf$"
+        }
+      ],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "rhythm-can": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "Tests?\\.cs$"
+        },
+        {
+          "rule": "lang/csharp.md",
+          "files": "\\.(cs|asmdef)$"
+        }
+      ],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "room489": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "\\.(test|spec)\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/typescript.md",
+          "files": "\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/iac.md",
+          "files": "\\.tf$"
+        }
+      ],
+      "exempt_overlays": [
+        "flow.md"
+      ],
+      "exclude_pathspecs": []
+    },
+    "ryuteki-kaggle": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "(^|/)test_[^/]*\\.py$|_test\\.py$"
+        },
+        {
+          "rule": "lang/python.md",
+          "files": "\\.py$"
+        },
+        {
+          "rule": "lang/iac.md",
+          "files": "\\.tf$"
+        }
+      ],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "shikacrush": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md",
+          "files": "_test\\.go$|(^|/)test_[^/]*\\.py$|_test\\.py$"
+        },
+        {
+          "rule": "lang/go.md",
+          "files": "\\.go$"
+        },
+        {
+          "rule": "lang/python.md",
+          "files": "\\.py$"
+        },
+        {
+          "rule": "lang/iac.md",
+          "files": "\\.tf$"
+        }
+      ],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    },
+    "unitoccata-editor": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "testing.md"
+        },
+        {
+          "rule": "lang/typescript.md",
+          "files": "\\.(ts|tsx)$"
+        }
+      ],
+      "exempt_overlays": [
+        "flow.md"
+      ],
+      "exclude_pathspecs": [
+        ":(exclude,glob)**/package-lock.json"
+      ]
+    },
+    "urahack": {
+      "overlay_dir": "rules",
+      "extra_docs": [],
+      "rules": [
+        {
+          "rule": "principles.md",
+          "overlay": "urahack-overrides.md"
+        },
+        {
+          "rule": "testing.md",
+          "replace": true
+        },
+        {
+          "rule": "lang/typescript.md",
+          "files": "^(shared|UrahackFree|UrahackPro)/.*\\.(ts|tsx)$"
+        },
+        {
+          "rule": "lang/python.md",
+          "files": "^shared/scripts/.*\\.py$"
+        }
+      ],
+      "exempt_overlays": [],
+      "exclude_pathspecs": []
+    }
+  }
+}
