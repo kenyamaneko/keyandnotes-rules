@@ -26,7 +26,7 @@ extract_decision_section() {
   '
 }
 
-# 報告か判断事項の項目を含む応答だけを検査の対象にする。
+# 報告ではない応答に無関係な指摘を出さないため、報告か判断事項の項目を含む応答だけを検査の対象にする。
 is_report_message() {
   local message="$1" section
   section=$(printf '%s\n' "$message" | extract_decision_section)
@@ -39,7 +39,7 @@ has_decision_items() {
   printf '%s\n' "$message" | extract_decision_section | grep -qE '^[0-9]+\. '
 }
 
-# 草稿と最終の応答を打ち直したときの行末の空白や前後の空行の違いで、一致しないと判定されるのを防ぐ。
+# 草稿と最終の応答を打ち直したときの行末の空白や前後の空行の違いで一致しなくなるのを防ぐため、これらを除いてからハッシュを取る。
 hash_message() {
   local message="$1"
   printf '%s\n' "$message" \
@@ -172,7 +172,7 @@ collect_concise_reasons() {
   done < <(printf '%s' "$review_json" | jq -c '.concise_issues[]')
 }
 
-# 違反の指摘を標準出力に出す。違反がなければ何も出さない。検査の実行に失敗したときは、失敗の内容を標準エラー出力に出して 2 を返す。
+# 呼び出し側が違反と検査の失敗を見分けられるよう、違反の指摘は標準出力に出し、検査の失敗は標準エラー出力に出して 2 を返す。
 review_message() {
   local message="$1" session_id="$2" prompt_id="$3"
   local reasons="" unread_files reviewer_output reviewer_status review_json
