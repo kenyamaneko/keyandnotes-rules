@@ -2,7 +2,6 @@
 # commit 前の監査フック (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh) から source される。
 # 複数のフックが同じ判断をするため、commit 先の解決と、principles.md の @import 一覧の導出をここに置く。
 
-# 全リポの監査設定。両フックが同じファイルを読むため、場所をここに一つだけ置く。
 KN_SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly KN_SHARED_REPO_DIR
 readonly REPOS_CONFIG_FILE="${KN_SHARED_REPO_DIR}/scripts/config/audit-repos.yaml"
