@@ -12,7 +12,7 @@ set -uo pipefail
 SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly SHARED_REPO_DIR
 readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/claude-audit-common.sh"
-readonly REPOS_CONFIG_FILE="${SHARED_REPO_DIR}/scripts/audit-repos.json"
+readonly REPOS_CONFIG_FILE="${SHARED_REPO_DIR}/scripts/audit-repos.yaml"
 
 fail_closed() {
   printf '⚠️  pre-commit-machine-audit: %s 監査不能のため fail-safe で commit ブロック。\n' "$1" >&2
@@ -34,7 +34,8 @@ cd "$target_cwd" 2>/dev/null || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
 [ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
-kn_is_excluded_repo "$REPOS_CONFIG_FILE" "$(kn_repo_name "$target_cwd")" && exit 0
+repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
+kn_is_excluded_repo "$repos_config" "$(kn_repo_name "$target_cwd")" && exit 0
 
 staged=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
 [ -z "$staged" ] && exit 0

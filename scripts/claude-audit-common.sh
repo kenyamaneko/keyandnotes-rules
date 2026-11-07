@@ -57,10 +57,31 @@ kn_repo_name() {
   basename "$(kn_main_checkout_root "$1")"
 }
 
-# 全リポの設定で監査対象外と明示したリポなら 0 を返す。
+readonly KN_CONFIG_ERROR_MAX_LINES=5
+
+# 全リポの設定 (YAML) を JSON にして返す。読めなかったときは、利用者に見せるエラーメッセージを標準出力に書いて 1 を返す。
+kn_load_repos_config() {
+  local out err_file err
+  err_file=$(mktemp)
+  # macOS 標準の ruby は YAML を標準ライブラリで読めるため、ruby で変換する。
+  if ! out=$(ruby -ryaml -rjson -e 'puts JSON.generate(YAML.safe_load(File.read(ARGV[0])))' "$1" 2>"$err_file"); then
+    err=$(head -n "$KN_CONFIG_ERROR_MAX_LINES" "$err_file")
+    rm -f "$err_file"
+    printf '全リポの設定 (%s) を YAML として読めない。YAML の構文を直すか、ruby が使えることを確認してください。ruby の出力: %s' "$1" "$err"
+    return 1
+  fi
+  rm -f "$err_file"
+  if ! printf '%s' "$out" | jq -e '.repos | type == "object"' >/dev/null 2>&1; then
+    printf '全リポの設定 (%s) の repos が、リポ名ごとの設定を並べた形になっていない。repos の下にリポ名をキーとして設定を書いてください。' "$1"
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
+# 全リポの設定 (JSON) で監査対象外と明示したリポなら 0 を返す。
 kn_is_excluded_repo() {
   local repos_config="$1" repo_name="$2"
-  [ "$(jq -r --arg name "$repo_name" '.repos[$name].excluded // false' "$repos_config" 2>/dev/null)" = "true" ]
+  [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos[$name].excluded // false' 2>/dev/null)" = "true" ]
 }
 
 # principles.md が @import する参照先を1行1件で返す。
