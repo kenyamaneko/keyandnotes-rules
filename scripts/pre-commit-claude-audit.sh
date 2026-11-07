@@ -199,6 +199,11 @@ format_violations() {
   jq -r '.[] | "- \(.file):\(.line)  [明白度: \(if .clarity == "obvious" then "明白" else "解釈次第" end) / 是正の安全性: \(if .fix_safety == "safe" then "実害なし" else "実害ありうる" end)]\n    rule: \(.rule)\n    evidence: \(.evidence)\n    why: \(.why)"'
 }
 
+# 確認ダイアログは長い理由の後半を省略するため、指摘ごとの 1 行の一覧を詳細より前に出す。
+format_violation_summary() {
+  jq -r '.[] | "- \(.file):\(.line)  \(.rule)"'
+}
+
 emit_decision() {
   local decision="$1" reason="$2"
   log_audit_reason "$decision" "$repo_name" "$reason"
@@ -328,7 +333,9 @@ escalate_count=$(printf '%s' "$escalate" | jq 'length')
 # auditor は 1 つの diff を一括で判定するため、明白な違反を先に deny で解消させ、残りは再 commit 時に ask で確認する。
 if [ "$autofix_count" -gt 0 ]; then
   reason=$(
-    printf '明白かつ修正に実害のないルール違反 %d 件を検出。principles「ルール違反への対応」に従い、自律修正してから再 commit してください:\n\n' "$autofix_count"
+    printf '明白かつ修正に実害のないルール違反 %d 件を検出。principles「ルール違反への対応」に従い、自律修正してから再 commit してください (全文: %s):\n\n' "$autofix_count" "$AUDIT_LOG_FILE"
+    printf '%s' "$autofix" | format_violation_summary
+    printf '\n'
     printf '%s' "$autofix" | format_violations
     if [ "$escalate_count" -gt 0 ]; then
       printf '\n\n(解釈次第 / 是正に実害ありうる違反 %d 件は、上記修正後の再 commit で別途確認します。今は触れないでください。)' "$escalate_count"
@@ -339,7 +346,9 @@ if [ "$autofix_count" -gt 0 ]; then
 fi
 
 reason=$(
-  printf 'Claude auditor が判断を要するルール違反 %d 件を検出。明白でない、または是正に設計上の実害がありうるため、修正可否を判断してください:\n\n' "$escalate_count"
+  printf 'Claude auditor が判断を要するルール違反 %d 件を検出。明白でない、または是正に設計上の実害がありうるため、修正可否を判断してください (全文: %s):\n\n' "$escalate_count" "$AUDIT_LOG_FILE"
+  printf '%s' "$escalate" | format_violation_summary
+  printf '\n'
   printf '%s' "$escalate" | format_violations
   printf '\n\n修正するなら拒否、意図的に commit するなら許可してください。'
 )
