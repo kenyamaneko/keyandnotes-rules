@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# staged diff を別プロセスの Claude に共通ルールと commit 先リポのルールで審査させ、違反があれば commit を止める。全リポの設定を audit-repos.json に集約し、commit 先のリポは commit するディレクトリから求める。
+# staged diff を別プロセスの Claude に共通ルールと commit 先リポのルールで審査させ、違反があれば commit を止める。全リポの設定を audit-repos.yaml に集約し、commit 先のリポは commit するディレクトリから求める。
 
 set -uo pipefail
 
@@ -21,7 +21,7 @@ SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly SHARED_REPO_DIR
 readonly BASE_RULES="${SHARED_REPO_DIR}/rules"
 readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/claude-audit-common.sh"
-readonly REPOS_CONFIG_FILE="${SHARED_REPO_DIR}/scripts/audit-repos.json"
+readonly REPOS_CONFIG_FILE="${SHARED_REPO_DIR}/scripts/audit-repos.yaml"
 
 # shellcheck source=/dev/null
 source "$COMMON_LIB" || { printf '⚠️  pre-commit-claude-audit: 共有ロジック (%s) を読み込めない。監査不能のため fail-safe で commit ブロック。\n' "$COMMON_LIB" >&2; exit 2; }
@@ -228,10 +228,10 @@ repo_name=$(kn_repo_name "$commit_dir")
 expected_repo_root=$(kn_main_checkout_root "$commit_dir") || fail_closed "commit 先 (${commit_dir}) の本体のチェックアウトを求められない。"
 
 [ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
-kn_is_excluded_repo "$REPOS_CONFIG_FILE" "$repo_name" && exit 0
-repo_entry=$(jq -c --arg name "$repo_name" '.repos[$name] // empty' "$REPOS_CONFIG_FILE" 2>/dev/null) \
-  || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) を JSON として読めない。"
-[ -n "$repo_entry" ] || fail_closed "リポ ${repo_name} の設定が ${REPOS_CONFIG_FILE} に無い。監査する場合は rules を、監査しない場合は {\"excluded\": true} を書いて追加してください。"
+repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
+kn_is_excluded_repo "$repos_config" "$repo_name" && exit 0
+repo_entry=$(printf '%s' "$repos_config" | jq -c --arg name "$repo_name" '.repos[$name] // empty')
+[ -n "$repo_entry" ] || fail_closed "リポ ${repo_name} の設定が ${REPOS_CONFIG_FILE} に無い。監査する場合は rules を、監査しない場合は excluded: true を書いて追加してください。"
 
 # 検証と各所の jq が同じ入力を読めるよう、リポの設定を一時ファイルに書き出す。
 config_file=$(mktemp)
@@ -305,7 +305,7 @@ while IFS= read -r overlay_file; do
   rel="${overlay_file#"${OVERLAY_RULES}/"}"
   jq -e --arg p "$rel" '.exempt_overlays | index($p) != null' "$config_file" >/dev/null && continue
   printf '%s\n' "$covered_overlays" | grep -qxF -- "$rel" \
-    || fail_closed "overlay rules/${rel} が監査に注入されない。全リポの設定 (audit-repos.json) の rules に追加する (ルールでなければ exempt_overlays に追加する)。"
+    || fail_closed "overlay rules/${rel} が監査に注入されない。全リポの設定 (audit-repos.yaml) の rules に追加する (ルールでなければ exempt_overlays に追加する)。"
 done < <([ -n "$OVERLAY_RULES" ] && find "$OVERLAY_RULES" -type f -name '*.md' 2>/dev/null)
 
 rules_bytes=$(build_prompt "" | wc -c | tr -d ' ')
