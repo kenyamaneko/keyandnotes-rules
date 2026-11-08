@@ -7,7 +7,7 @@ set -uo pipefail
 readonly DIALOGUE_HEADING='## [base] ユーザーへの報告と質問'
 readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
 
-repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+repo_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 rules_dir="${repo_dir}/rules"
 principles_file="${rules_dir}/principles.md"
 report_template_file="${repo_dir}/templates/report.template.md"
@@ -47,7 +47,7 @@ ${dialogue_section}
 
 ${report_template}
 
-報告 (「## 報告事項」の見出しか判断事項の項目を含む応答) を出す前に、応答の全文を草稿のファイルに書き、${repo_dir}/scripts/check-report.sh に草稿のファイルを渡して実行する。違反が出たら草稿を直して、通るまで繰り返す。通ったら、草稿の全文をそのまま最終の応答として出す。検査を通っていない報告を出すと、差し戻されて直した報告が画面に何度も出る。"
+報告 (「## 報告事項」の見出しか判断事項の項目を含む応答) を出す前に、応答の全文を草稿のファイルに書き、${repo_dir}/scripts/report-check/check-report.sh に草稿のファイルを渡して実行する。違反が出たら草稿を直して、通るまで繰り返す。通ったら、草稿の全文をそのまま最終の応答として出す。検査を通っていない報告を出すと、差し戻されて直した報告が画面に何度も出る。"
 jq -nc --arg m "$message" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $m}}'
 
 exit 0

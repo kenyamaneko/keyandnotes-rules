@@ -1,0 +1,25 @@
+# コミット前の監査 (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh) が、監査するリポとして読むファイルの雛形。
+# このファイルを同じディレクトリに audit-repos.yaml という名前でコピーし、自分のリポに合わせて書き換える。
+# コピーした audit-repos.yaml は git で管理しない。
+#
+# repos の下に、監査するリポのディレクトリ名をキーにして 1 リポ 1 項目で書く。ここに書かないリポは監査しない。
+# 設定が要らないリポは {} と書く。
+#
+# overlay_dir:
+#   リポ固有のルールを置くディレクトリ。リポのルートからの相対パス。省略すると rules。
+# extra_docs:
+#   監査の前提として、ルールに加えて読ませるドキュメント。リポのルートからの相対パスで並べる。
+
+repos:
+  shop-storefront: {}
+
+  # 別リポのルールとドキュメントを使うリポ
+  shop-checkout:
+    overlay_dir: ../shop-common/rules
+    extra_docs:
+      - ../shop-common/docs/GLOSSARY.md
+
+  # ルールとドキュメントの置き場になっているリポ
+  shop-common:
+    extra_docs:
+      - docs/GLOSSARY.md
