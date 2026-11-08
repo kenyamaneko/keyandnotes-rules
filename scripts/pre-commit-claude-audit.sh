@@ -8,6 +8,19 @@ readonly AUDIT_LOG_FILE="${AUDIT_LOG_DIR}/pre-commit-claude-audit.log"
 readonly DIFF_CONTEXT_LINES=10
 readonly DEFAULT_OVERLAY_DIR="rules"
 
+# package-lock.json は生成されるファイルで、ルール違反の対象にならないため、リポによらず監査する差分から外す。
+readonly EXCLUDED_PATHSPECS=(':(exclude,glob)**/package-lock.json')
+
+readonly LANG_RULES_JSON='[
+  {"rule": "lang/iac.md", "files": "\\.tf$"},
+  {"rule": "lang/python.md", "files": "\\.py$"},
+  {"rule": "lang/go.md", "files": "\\.go$"},
+  {"rule": "lang/typescript.md", "files": "\\.(ts|tsx)$"},
+  {"rule": "lang/csharp.md", "files": "\\.(cs|asmdef)$"},
+  {"rule": "lang/dart.md", "files": "\\.dart$"},
+  {"rule": "lang/kotlin.md", "files": "\\.kts?$"}
+]'
+
 # 頻繁に走るため、速度と推論のバランスで sonnet を使う。
 readonly AUDITOR_MODEL="claude-sonnet-5"
 
@@ -70,43 +83,40 @@ reject_command() {
   exit 2
 }
 
-# 注入するルールを 1 行 1 件で返す。列は、ルール名・overlay 名・全面置換か・注入対象か (staged のファイル名が条件に合うか)。
+# 注入するルールを 1 行 1 件で返す。列は、ルール名・注入対象か (言語のルールは、staged のファイル名が条件に合うか)。
 plan_rules() {
-  jq -r --argjson auto "$auto_refs_json" --argjson names "$staged_names_json" '
-    .rules as $configured
-    | (([{rule: "principles.md"}] + ($auto | map({rule: .}))) | map(select(.rule as $r | $configured | all(.rule != $r)))) + $configured
+  jq -nr --argjson auto "$auto_refs_json" --argjson names "$staged_names_json" --argjson lang "$LANG_RULES_JSON" '
+    ([{rule: "principles.md"}] + ($auto | map({rule: .})) + $lang)
     | .[]
     | (.files // null) as $files
-    | [.rule, (.overlay // .rule), (.replace // false),
-       (($files == null) or ($names | any(test($files))))]
-    | @tsv' "$config_file"
+    | [.rule, (($files == null) or ($names | any(test($files))))]
+    | @tsv'
 }
 
-# overlay_dir が null のリポ (共通ルールそのものを置くリポ) には overlay が無い。
+# overlay_dir が共通ルールの置き場と同じリポ (共通ルールそのものを置くリポ) には overlay が無い。
 overlay_exists() {
   [ -n "$OVERLAY_RULES" ] && [ -f "${OVERLAY_RULES}/$1" ]
 }
 
 # 同じ相対パスの base と overlay を必ず対で出し、overlay の注入漏れを防ぐ。
 emit_rule() {
-  local rel="$1" overlay_name="$2" replace="$3"
-  local base="${BASE_RULES}/${rel}"
-  local overlay="${OVERLAY_RULES}/${overlay_name}"
-  if [ "$replace" = "true" ]; then
-    printf '\n\n## [overlay/%s] rules/%s (共通 %s を全面置換。本ファイルを正とする)\n' "$repo_name" "$overlay_name" "$rel"
-    cat "$overlay"
-    return 0
-  fi
+  local rel="$1"
   printf '\n\n## [base] rules/%s\n' "$rel"
-  cat "$base"
-  if overlay_exists "$overlay_name"; then
-    printf '\n\n## [overlay/%s] rules/%s (base と衝突する場合はこちらを優先)\n' "$repo_name" "$overlay_name"
-    cat "$overlay"
+  cat "${BASE_RULES}/${rel}"
+  if overlay_exists "$rel"; then
+    printf '\n\n## [overlay/%s] rules/%s (base と衝突する場合はこちらを優先)\n' "$repo_name" "$rel"
+    cat "${OVERLAY_RULES}/${rel}"
   fi
 }
 
+# 共通ルールに対応するファイルが無い overlay は、リポ固有のルールとして単独で出す。
+emit_standalone_overlay() {
+  printf '\n\n## [overlay/%s] rules/%s (リポ固有のルール。base と衝突する場合はこちらを優先)\n' "$repo_name" "$1"
+  cat "${OVERLAY_RULES}/$1"
+}
+
 build_prompt() {
-  local entry rel overlay_name replace doc
+  local rel doc
   cat <<HEADER
 あなたは ${repo_name} リポの SOFT (意味解釈型) ルール auditor です。
 別の Claude が書いた staged diff を、以下の共通ルール (base) と ${repo_name} 固有ルール (overlay) に照らしてレビューしてください。
@@ -129,9 +139,11 @@ overlay は対応する base のルールを上書きする階層です。base �
 # 適用ルール (target repo: ${repo_name})
 HEADER
 
-  for entry in ${active_rules[@]+"${active_rules[@]}"}; do
-    IFS='|' read -r rel overlay_name replace <<< "$entry"
-    emit_rule "$rel" "$overlay_name" "$replace"
+  for rel in ${active_rules[@]+"${active_rules[@]}"}; do
+    emit_rule "$rel"
+  done
+  for rel in ${standalone_overlays[@]+"${standalone_overlays[@]}"}; do
+    emit_standalone_overlay "$rel"
   done
   for doc in ${extra_docs[@]+"${extra_docs[@]}"}; do
     printf '\n\n## %s\n' "$doc"
@@ -233,37 +245,32 @@ expected_repo_root=$(kn_main_checkout_root "$commit_dir") || fail_closed "commit
 
 [ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
 repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
-kn_is_excluded_repo "$repos_config" "$repo_name" && exit 0
-repo_entry=$(printf '%s' "$repos_config" | jq -c --arg name "$repo_name" '.repos[$name] // empty')
-[ -n "$repo_entry" ] || fail_closed "リポ ${repo_name} の設定が ${REPOS_CONFIG_FILE} に無い。監査する場合は rules を、監査しない場合は excluded: true を書いて追加してください。"
+kn_is_audit_target "$repos_config" "$repo_name" || exit 0
 
 # 検証と各所の jq が同じ入力を読めるよう、リポの設定を一時ファイルに書き出す。
 config_file=$(mktemp)
 trap 'rm -f "$err_file" "$config_file"' EXIT
-printf '%s' "$repo_entry" > "$config_file"
+printf '%s' "$repos_config" | jq -c --arg name "$repo_name" '.repos[$name] // {}' > "$config_file"
 
 config_valid=$(jq -r '
-  (.rules | type == "array") and all(.rules[]; .rule | type == "string")
-  and (.exempt_overlays | type == "array")
-  and (.exclude_pathspecs | type == "array")
-  and (.extra_docs | type == "array")
-  and (.overlay_dir | type == "string" or . == null)
+  type == "object"
+  and ((keys - ["overlay_dir", "extra_docs"]) | length == 0)
+  and (if has("overlay_dir") then (.overlay_dir | type == "string" and length > 0) else true end)
+  and ((.extra_docs // []) | type == "array" and all(.[]; type == "string"))
 ' "$config_file" 2>/dev/null)
-[ "$config_valid" = "true" ] || fail_closed "リポ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の形式が不正。rules / exempt_overlays / exclude_pathspecs / extra_docs / overlay_dir が必要。"
+[ "$config_valid" = "true" ] || fail_closed "リポ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の形式が不正。書けるのは overlay_dir (空でない文字列) と extra_docs (文字列の配列) だけ。"
 
-overlay_dir=$(jq -r '.overlay_dir // ""' "$config_file")
+overlay_dir=$(jq -r --arg default "$DEFAULT_OVERLAY_DIR" '.overlay_dir // $default' "$config_file")
+overlay_path=$(cd "${expected_repo_root}/${overlay_dir}" 2>/dev/null && pwd -P)
+if [ -z "$overlay_path" ] && jq -e 'has("overlay_dir")' "$config_file" >/dev/null; then
+  fail_closed "リポ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の overlay_dir ${overlay_dir} が見つからない。リポのルートからの正しいパスに直すか、overlay_dir の行を消して。"
+fi
 OVERLAY_RULES=""
-[ -n "$overlay_dir" ] && OVERLAY_RULES="${expected_repo_root}/${overlay_dir}"
+[ -n "$overlay_path" ] && [ "$overlay_path" != "$BASE_RULES" ] && OVERLAY_RULES="$overlay_path"
 
-exclude_pathspecs=()
-while IFS= read -r pathspec; do
-  [ -n "$pathspec" ] && exclude_pathspecs+=("$pathspec")
-done < <(jq -r '.exclude_pathspecs[]' "$config_file")
-
-# 空配列の展開は bash 3.2 の set -u でエラーになるため、要素があるときだけ展開する。
-staged_diff=$(git diff --cached -U"$DIFF_CONTEXT_LINES" --diff-filter=ACM -- . ${exclude_pathspecs[@]+"${exclude_pathspecs[@]}"} 2>/dev/null)
+staged_diff=$(git diff --cached -U"$DIFF_CONTEXT_LINES" --diff-filter=ACM -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
 [ -z "$staged_diff" ] && exit 0
-staged_names=$(git diff --cached --name-only --diff-filter=ACM -- . ${exclude_pathspecs[@]+"${exclude_pathspecs[@]}"} 2>/dev/null)
+staged_names=$(git diff --cached --name-only --diff-filter=ACM -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
 staged_files=()
 while IFS= read -r file; do
   [ -n "$file" ] && staged_files+=("$file")
@@ -274,43 +281,30 @@ while IFS= read -r doc; do
   [ -z "$doc" ] && continue
   [ -f "${expected_repo_root}/${doc}" ] || fail_closed "リポ ${repo_name} の前提ドキュメント ${doc} が見つからない。"
   extra_docs+=("$doc")
-done < <(jq -r '.extra_docs[]' "$config_file")
+done < <(jq -r '(.extra_docs // [])[]' "$config_file")
 
-configured_rule_names=()
-while IFS= read -r rule_name; do
-  configured_rule_names+=("$rule_name")
-done < <(jq -r '.rules[].rule' "$config_file")
-auto_refs=$(kn_auto_inject_refs "$BASE_RULES" "${BASE_RULES}/principles.md" ${configured_rule_names[@]+"${configured_rule_names[@]}"}) \
+auto_refs=$(kn_auto_inject_refs "$BASE_RULES" "${BASE_RULES}/principles.md") \
   || fail_closed 'principles.md が参照する base ルールの自動導出に失敗。'
 auto_refs_json=$(printf '%s\n' "$auto_refs" | jq -R . | jq -sc 'map(select(length > 0))')
 staged_names_json=$(printf '%s\n' "$staged_names" | jq -R . | jq -sc 'map(select(length > 0))')
 
-rule_plan=$(plan_rules) || fail_closed "設定 (${config_file}) の rules の条件 (files) が不正。"
+rule_plan=$(plan_rules) || fail_closed "言語のルールの条件 (files) が不正。"
 
 # build_prompt はパイプのサブシェルで走り exit が親に伝わらないため、ルールの存在検証はここで済ませる。
 active_rules=()
-covered_overlays=""
-while IFS=$'\t' read -r rel overlay_name replace active; do
+while IFS=$'\t' read -r rel active; do
   [ -z "$rel" ] && continue
-  covered_overlays="${covered_overlays}"$'\n'"${overlay_name}"
-  if [ "$replace" = "true" ]; then
-    overlay_exists "$overlay_name" || fail_closed "${repo_name} の overlay rules/${overlay_name} が見つからず、共通 ${rel} を置き換えられない。"
-  else
-    [ -f "${BASE_RULES}/${rel}" ] || fail_closed "共通ルール rules/${rel} が見つからず実効ルール集を構成できない。"
-    if [ "$overlay_name" != "$rel" ] && ! overlay_exists "$overlay_name"; then
-      fail_closed "${repo_name} の overlay rules/${overlay_name} が見つからず実効ルール集を構成できない。"
-    fi
-  fi
-  [ "$active" = "true" ] && active_rules+=("${rel}|${overlay_name}|${replace}")
+  [ -f "${BASE_RULES}/${rel}" ] || fail_closed "共通ルール rules/${rel} が見つからず実効ルール集を構成できない。"
+  [ "$active" = "true" ] && active_rules+=("$rel")
 done <<< "$rule_plan"
 
-# overlay を足しても設定に書き忘れると監査から静かに漏れるため、注入されない overlay を検知して止める。
-while IFS= read -r overlay_file; do
-  rel="${overlay_file#"${OVERLAY_RULES}/"}"
-  jq -e --arg p "$rel" '.exempt_overlays | index($p) != null' "$config_file" >/dev/null && continue
-  printf '%s\n' "$covered_overlays" | grep -qxF -- "$rel" \
-    || fail_closed "overlay rules/${rel} が監査に注入されない。全リポの設定 (audit-repos.yaml) の rules に追加する (ルールでなければ exempt_overlays に追加する)。"
-done < <([ -n "$OVERLAY_RULES" ] && find "$OVERLAY_RULES" -type f -name '*.md' 2>/dev/null)
+standalone_overlays=()
+if [ -n "$OVERLAY_RULES" ]; then
+  while IFS= read -r overlay_file; do
+    rel="${overlay_file#"${OVERLAY_RULES}/"}"
+    [ -f "${BASE_RULES}/${rel}" ] || standalone_overlays+=("$rel")
+  done < <(find "$OVERLAY_RULES" -type f -name '*.md' | sort)
+fi
 
 rules_bytes=$(build_prompt "" | wc -c | tr -d ' ')
 diff_budget=$(( MAX_PROMPT_BYTES - rules_bytes ))

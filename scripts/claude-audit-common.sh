@@ -82,10 +82,10 @@ kn_load_repos_config() {
   printf '%s' "$out"
 }
 
-# 全リポの設定 (JSON) で監査対象外と明示したリポなら 0 を返す。
-kn_is_excluded_repo() {
+# 全リポの設定 (JSON) に書かれたリポ (監査対象) なら 0 を返す。リポの設定が空のときも、書かれていれば監査対象とする。
+kn_is_audit_target() {
   local repos_config="$1" repo_name="$2"
-  [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos[$name].excluded // false' 2>/dev/null)" = "true" ]
+  [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos | has($name)')" = "true" ]
 }
 
 # principles.md が @import する参照先を1行1件で返す。
@@ -94,13 +94,11 @@ kn_discover_base_refs() {
   grep -oE '@[A-Za-z0-9_./-]+\.md' "$principles_path" | sed 's/^@//' | sort -u
 }
 
-# kn_discover_base_refs の結果から exclude_refs (呼び出し側が別途扱う参照) を除いた注入対象を返す。
+# kn_discover_base_refs の結果を注入対象として返す。
 # principles_path または参照先ファイルが存在しない場合は fail-closed で非ゼロ終了する。
 kn_auto_inject_refs() {
   local base_rules_dir="$1" principles_path="$2"
-  shift 2
-  local exclude_refs=("$@")
-  local ref path skip ex missing=0
+  local ref path missing=0
 
   if [ ! -f "$principles_path" ]; then
     printf 'kn_auto_inject_refs: principles.md (%s) が見つかりません。\n' "$principles_path" >&2
@@ -109,12 +107,6 @@ kn_auto_inject_refs() {
 
   while IFS= read -r ref; do
     [ -z "$ref" ] && continue
-    skip=0
-    # 空配列の展開は bash 3.2 の set -u でエラーになるため、要素があるときだけ展開する。
-    for ex in ${exclude_refs[@]+"${exclude_refs[@]}"}; do
-      [ "$ex" = "$ref" ] && { skip=1; break; }
-    done
-    [ "$skip" -eq 1 ] && continue
 
     path="${base_rules_dir}/${ref}"
     if [ ! -f "$path" ]; then
