@@ -34,7 +34,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
 [ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
 repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
-kn_is_excluded_repo "$repos_config" "$(kn_repo_name "$target_cwd")" && exit 0
+kn_is_audit_target "$repos_config" "$(kn_repo_name "$target_cwd")" || exit 0
 
 staged=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
 [ -z "$staged" ] && exit 0
