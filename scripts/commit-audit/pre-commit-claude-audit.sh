@@ -30,10 +30,10 @@ readonly MAX_PROMPT_BYTES=350000
 # これを下回るとチャンク分割しても監査が成立しないため、監査不能にする。
 readonly MIN_DIFF_BUDGET_BYTES=20000
 
-SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 readonly SHARED_REPO_DIR
 readonly BASE_RULES="${SHARED_REPO_DIR}/rules"
-readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/claude-audit-common.sh"
+readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/commit-audit/claude-audit-common.sh"
 
 # shellcheck source=/dev/null
 source "$COMMON_LIB" || { printf '⚠️  pre-commit-claude-audit: 共有ロジック (%s) を読み込めない。監査不能のため fail-safe で commit ブロック。\n' "$COMMON_LIB" >&2; exit 2; }

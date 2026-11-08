@@ -2,9 +2,9 @@
 # commit 前の監査フック (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh) から source される。
 # 複数のフックが同じ判断をするため、commit 先の解決と、principles.md の @import 一覧の導出をここに置く。
 
-KN_SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+KN_SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 readonly KN_SHARED_REPO_DIR
-readonly REPOS_CONFIG_FILE="${KN_SHARED_REPO_DIR}/scripts/config/audit-repos.yaml"
+readonly REPOS_CONFIG_FILE="${KN_SHARED_REPO_DIR}/scripts/commit-audit/config/audit-repos.yaml"
 
 # git と副コマンドの間に置ける -C <dir>・-c <key=value> (引数は quote を消した後に空になりうる)。
 readonly KN_GIT_GLOBAL_OPTS='([[:space:]]+-[Cc]([[:space:]]+[^[:space:]]+)?)*'

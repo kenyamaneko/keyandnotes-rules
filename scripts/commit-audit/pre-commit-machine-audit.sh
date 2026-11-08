@@ -9,9 +9,9 @@
 
 set -uo pipefail
 
-SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 readonly SHARED_REPO_DIR
-readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/claude-audit-common.sh"
+readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/commit-audit/claude-audit-common.sh"
 
 fail_closed() {
   printf '⚠️  pre-commit-machine-audit: %s 監査不能のため fail-safe で commit ブロック。\n' "$1" >&2

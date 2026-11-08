@@ -17,13 +17,13 @@ mkdir -p "$(dirname "$settings_file")"
 # スクリプトの変更を取り込めるよう、2 回目以降の実行では上書きする。
 registered=$(jq \
   --arg dir "${scripts_dir}/" \
-  --arg remind "${scripts_dir}/remind-rules-reread.sh" \
-  --arg review "${scripts_dir}/review-report.sh" \
-  --arg record "${scripts_dir}/record-rules-read.sh" \
-  --arg guard "${scripts_dir}/guard-rules-edit.sh" \
-  --arg machine_audit "${scripts_dir}/pre-commit-machine-audit.sh" \
-  --arg claude_audit "${scripts_dir}/pre-commit-claude-audit.sh" \
-  --arg hold "${scripts_dir}/hold-unchecked-report.sh" \
+  --arg remind "${scripts_dir}/rules-control/remind-rules-reread.sh" \
+  --arg review "${scripts_dir}/report-check/review-report.sh" \
+  --arg record "${scripts_dir}/rules-control/record-rules-read.sh" \
+  --arg guard "${scripts_dir}/rules-control/guard-rules-edit.sh" \
+  --arg machine_audit "${scripts_dir}/commit-audit/pre-commit-machine-audit.sh" \
+  --arg claude_audit "${scripts_dir}/commit-audit/pre-commit-claude-audit.sh" \
+  --arg hold "${scripts_dir}/report-check/hold-unchecked-report.sh" \
   --argjson review_timeout "$REVIEW_REPORT_TIMEOUT_SECONDS" '
   def register($event; $entry):
     .hooks[$event] = ((.hooks[$event] // []) + [$entry]);

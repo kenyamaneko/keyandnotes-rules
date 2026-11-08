@@ -12,7 +12,7 @@ readonly FAILURE_OUTPUT_LENGTH=500
 readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
 readonly REVIEW_SCHEMA='{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"number":{"type":"integer"},"verdict":{"type":"string","enum":["ルールで解決できる","聞いてよい"]},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"chosen_option":{"type":"string"},"explanation":{"type":"string"}},"required":["number","verdict","basis_file","basis_quote","chosen_option","explanation"]}},"concise_issues":{"type":"array","items":{"type":"object","properties":{"sentence":{"type":"string"},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"problem":{"type":"string"}},"required":["sentence","basis_file","basis_quote","problem"]}}},"required":["items","concise_issues"]}'
 
-repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 rules_dir="${repo_dir}/rules"
 templates_dir="${repo_dir}/templates"
 principles_file="${rules_dir}/principles.md"
