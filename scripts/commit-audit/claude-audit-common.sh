@@ -49,21 +49,21 @@ kn_resolve_commit_dir() {
   printf '%s' "$dir"
 }
 
-# 指定したディレクトリが属するリポの本体のチェックアウト (worktree の場合は本体) のルートを返す。
+# 指定したディレクトリが属するリポジトリの本体のチェックアウト (worktree の場合は本体) のルートを返す。
 kn_main_checkout_root() {
   local common_dir
   common_dir=$(cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
   dirname "$common_dir"
 }
 
-# 指定したディレクトリが属するリポの名前を返す。worktree は本体のディレクトリ名になる。
+# 指定したディレクトリが属するリポジトリの名前を返す。worktree は本体のディレクトリ名になる。
 kn_repo_name() {
   basename "$(kn_main_checkout_root "$1")"
 }
 
 readonly KN_CONFIG_ERROR_MAX_LINES=5
 
-# 全リポの設定 (YAML) を JSON にして返す。読めなかったときは、利用者に見せるエラーメッセージを標準出力に書いて 1 を返す。
+# 全リポジトリの設定 (YAML) を JSON にして返す。読めなかったときは、利用者に見せるエラーメッセージを標準出力に書いて 1 を返す。
 kn_load_repos_config() {
   local out err_file err
   err_file=$(mktemp)
@@ -71,18 +71,18 @@ kn_load_repos_config() {
   if ! out=$(ruby -ryaml -rjson -e 'puts JSON.generate(YAML.safe_load(File.read(ARGV[0])))' "$1" 2>"$err_file"); then
     err=$(head -n "$KN_CONFIG_ERROR_MAX_LINES" "$err_file")
     rm -f "$err_file"
-    printf '全リポの設定 (%s) を YAML として読めない。YAML の構文を直すか、ruby が使えることを確認してください。ruby の出力: %s' "$1" "$err"
+    printf '全リポジトリの設定 (%s) を YAML として読めない。YAML の構文を直すか、ruby が使えることを確認してください。ruby の出力: %s' "$1" "$err"
     return 1
   fi
   rm -f "$err_file"
   if ! printf '%s' "$out" | jq -e '.repos | type == "object"' >/dev/null 2>&1; then
-    printf '全リポの設定 (%s) の repos が、リポ名ごとの設定を並べた形になっていない。repos の下にリポ名をキーとして設定を書いてください。' "$1"
+    printf '全リポジトリの設定 (%s) の repos が、リポジトリ名ごとの設定を並べた形になっていない。repos の下にリポジトリ名をキーとして設定を書いてください。' "$1"
     return 1
   fi
   printf '%s' "$out"
 }
 
-# 全リポの設定 (JSON) に書かれたリポ (監査対象) なら 0 を返す。リポの設定が空のときも、書かれていれば監査対象とする。
+# 全リポジトリの設定 (JSON) に書かれたリポジトリ (監査対象) なら 0 を返す。リポジトリの設定が空のときも、書かれていれば監査対象とする。
 kn_is_audit_target() {
   local repos_config="$1" repo_name="$2"
   [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos | has($name)')" = "true" ]
