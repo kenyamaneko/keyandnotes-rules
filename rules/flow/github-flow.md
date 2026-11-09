@@ -2,7 +2,7 @@
 
 # Branching Strategy (GitHub Flow)
 
-GitHub Flow を採用するリポのブランチ戦略。
+GitHub Flow を採用するリポジトリのブランチ戦略。
 
 ## 概要
 
@@ -54,7 +54,7 @@ GitHub Flow を採用するリポのブランチ戦略。
 
 ## ブランチ保護設定
 
-GitHub Rulesets で以下を設定する。必須ステータスチェックの具体名は各リポの CI/CD ドキュメントを参照。
+GitHub Rulesets で以下を設定する。必須ステータスチェックの具体名は各リポジトリの CI/CD ドキュメントを参照。
 
 ### main
 

@@ -2,7 +2,7 @@
 
 # Google Cloud の利用方針
 
-Key and Notes 各プロジェクト共通の Google Cloud のサービスの使い分け。`infra-design.md` を Google Cloud について具体化する。
+Google Cloud のサービスを使い分けるときに従う規約。`infra-design.md` を Google Cloud について具体化する。
 
 ## 実行基盤
 

@@ -2,7 +2,7 @@
 
 # インフラ設計
 
-Key and Notes 各プロジェクト共通のインフラ設計規約。`principles.md` から参照される。クラウドごとのサービスの使い分けは `rules/cloud/<cloud>.md` が定める。
+インフラを設計するときに従う規約。クラウドごとのサービスの使い分けは `rules/cloud/<cloud>.md` が定める。
 
 ## IaC
 

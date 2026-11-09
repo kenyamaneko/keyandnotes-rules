@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# このリポのフックを Claude Code の設定ファイル (既定は ~/.claude/settings.json) に登録する。
+# このリポジトリのフックを Claude Code の設定ファイル (既定は ~/.claude/settings.json) に登録する。
 
 set -euo pipefail
 

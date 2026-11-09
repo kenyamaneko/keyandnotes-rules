@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# staged diff を別プロセスの Claude に共通ルールと commit 先リポのルールで審査させ、違反があれば commit を止める。全リポの設定を audit-repos.yaml に集約し、commit 先のリポは commit するディレクトリから求める。
+# staged diff を別プロセスの Claude に共通ルールと commit 先リポジトリのルールで審査させ、違反があれば commit を止める。全リポジトリの設定を audit-repos.yaml に集約し、commit 先のリポジトリは commit するディレクトリから求める。
 
 set -uo pipefail
 
@@ -8,7 +8,7 @@ readonly AUDIT_LOG_FILE="${AUDIT_LOG_DIR}/pre-commit-claude-audit.log"
 readonly DIFF_CONTEXT_LINES=10
 readonly DEFAULT_OVERLAY_DIR="rules"
 
-# package-lock.json は生成されるファイルで、ルール違反の対象にならないため、リポによらず監査する差分から外す。
+# package-lock.json は生成されるファイルで、ルール違反の対象にならないため、リポジトリによらず監査する差分から外す。
 readonly EXCLUDED_PATHSPECS=(':(exclude,glob)**/package-lock.json')
 
 readonly LANG_RULES_JSON='[
@@ -93,7 +93,7 @@ plan_rules() {
     | @tsv'
 }
 
-# overlay_dir が共通ルールの置き場と同じリポ (共通ルールそのものを置くリポ) には overlay が無い。
+# overlay_dir が共通ルールの置き場と同じリポジトリ (共通ルールそのものを置くリポジトリ) には overlay が無い。
 overlay_exists() {
   [ -n "$OVERLAY_RULES" ] && [ -f "${OVERLAY_RULES}/$1" ]
 }
@@ -109,16 +109,16 @@ emit_rule() {
   fi
 }
 
-# 共通ルールに対応するファイルが無い overlay は、リポ固有のルールとして単独で出す。
+# 共通ルールに対応するファイルが無い overlay は、リポジトリ固有のルールとして単独で出す。
 emit_standalone_overlay() {
-  printf '\n\n## [overlay/%s] rules/%s (リポ固有のルール。base と衝突する場合はこちらを優先)\n' "$repo_name" "$1"
+  printf '\n\n## [overlay/%s] rules/%s (リポジトリ固有のルール。base と衝突する場合はこちらを優先)\n' "$repo_name" "$1"
   cat "${OVERLAY_RULES}/$1"
 }
 
 build_prompt() {
   local rel doc
   cat <<HEADER
-あなたは ${repo_name} リポの SOFT (意味解釈型) ルール auditor です。
+あなたは ${repo_name} リポジトリの SOFT (意味解釈型) ルール auditor です。
 別の Claude が書いた staged diff を、以下の共通ルール (base) と ${repo_name} 固有ルール (overlay) に照らしてレビューしてください。
 overlay は対応する base のルールを上書きする階層です。base と overlay が衝突する場合は overlay を優先して判定してください。
 
@@ -240,14 +240,14 @@ cd "$commit_dir" 2>/dev/null || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
 repo_name=$(kn_repo_name "$commit_dir")
-# 子リポは本体のチェックアウトの隣にある別リポの overlay と前提ドキュメントを参照するため、worktree でなく本体のチェックアウトを基準にする。
+# 子リポジトリは本体のチェックアウトの隣にある別リポジトリの overlay と前提ドキュメントを参照するため、worktree でなく本体のチェックアウトを基準にする。
 expected_repo_root=$(kn_main_checkout_root "$commit_dir") || fail_closed "commit 先 (${commit_dir}) の本体のチェックアウトを求められない。"
 
-[ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
+[ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポジトリの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
 repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
 kn_is_audit_target "$repos_config" "$repo_name" || exit 0
 
-# 検証と各所の jq が同じ入力を読めるよう、リポの設定を一時ファイルに書き出す。
+# 検証と各所の jq が同じ入力を読めるよう、リポジトリの設定を一時ファイルに書き出す。
 config_file=$(mktemp)
 trap 'rm -f "$err_file" "$config_file"' EXIT
 printf '%s' "$repos_config" | jq -c --arg name "$repo_name" '.repos[$name] // {}' > "$config_file"
@@ -258,12 +258,12 @@ config_valid=$(jq -r '
   and (if has("overlay_dir") then (.overlay_dir | type == "string" and length > 0) else true end)
   and ((.extra_docs // []) | type == "array" and all(.[]; type == "string"))
 ' "$config_file" 2>/dev/null)
-[ "$config_valid" = "true" ] || fail_closed "リポ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の形式が不正。書けるのは overlay_dir (空でない文字列) と extra_docs (文字列の配列) だけ。"
+[ "$config_valid" = "true" ] || fail_closed "リポジトリ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の形式が不正。書けるのは overlay_dir (空でない文字列) と extra_docs (文字列の配列) だけ。"
 
 overlay_dir=$(jq -r --arg default "$DEFAULT_OVERLAY_DIR" '.overlay_dir // $default' "$config_file")
 overlay_path=$(cd "${expected_repo_root}/${overlay_dir}" 2>/dev/null && pwd -P)
 if [ -z "$overlay_path" ] && jq -e 'has("overlay_dir")' "$config_file" >/dev/null; then
-  fail_closed "リポ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の overlay_dir ${overlay_dir} が見つからない。リポのルートからの正しいパスに直すか、overlay_dir の行を消して。"
+  fail_closed "リポジトリ ${repo_name} の設定 (${REPOS_CONFIG_FILE}) の overlay_dir ${overlay_dir} が見つからない。リポジトリのルートからの正しいパスに直すか、overlay_dir の行を消して。"
 fi
 OVERLAY_RULES=""
 [ -n "$overlay_path" ] && [ "$overlay_path" != "$BASE_RULES" ] && OVERLAY_RULES="$overlay_path"
@@ -279,7 +279,7 @@ done <<< "$staged_names"
 extra_docs=()
 while IFS= read -r doc; do
   [ -z "$doc" ] && continue
-  [ -f "${expected_repo_root}/${doc}" ] || fail_closed "リポ ${repo_name} の前提ドキュメント ${doc} が見つからない。"
+  [ -f "${expected_repo_root}/${doc}" ] || fail_closed "リポジトリ ${repo_name} の前提ドキュメント ${doc} が見つからない。"
   extra_docs+=("$doc")
 done < <(jq -r '(.extra_docs // [])[]' "$config_file")
 
