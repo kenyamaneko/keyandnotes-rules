@@ -4,7 +4,8 @@
 
 set -uo pipefail
 
-readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
+# shellcheck source=read-log-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/read-log-common.sh"
 
 input=$(cat)
 

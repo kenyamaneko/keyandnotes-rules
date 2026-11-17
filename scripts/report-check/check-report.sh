@@ -25,10 +25,10 @@ main() {
     return "$STATUS_FAILURE"
   fi
 
-  local prompt_file="${READ_LOG_DIR}/${session_id}.prompt" prompt_id
-  prompt_id=$(cat "$prompt_file" 2>/dev/null)
+  local prompt_id
+  prompt_id=$(read_current_prompt_id "$session_id")
   if [ -z "$prompt_id" ]; then
-    printf '現在のユーザー入力の ID が記録されていない (%s)。報告の依頼事項に、UserPromptSubmit フック (remind-rules-reread.sh) の修正を書く。\n' "$prompt_file" >&2
+    printf '現在のユーザー入力の ID が記録されていない。報告の依頼事項に、ユーザー入力の ID を記録するフック (remind-rules-reread.sh・record-current-prompt.sh) の修正を書く。\n' >&2
     return "$STATUS_FAILURE"
   fi
 

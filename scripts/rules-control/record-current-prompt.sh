@@ -4,15 +4,11 @@
 
 set -uo pipefail
 
-readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
+# shellcheck source=read-log-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/read-log-common.sh"
 
 input=$(cat)
 session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
 prompt_id=$(printf '%s' "$input" | jq -r '.prompt_id // empty')
 
-if [ -n "$session_id" ] && [ -n "$prompt_id" ]; then
-  mkdir -p "$READ_LOG_DIR"
-  printf '%s\n' "$prompt_id" > "${READ_LOG_DIR}/${session_id}.prompt"
-fi
-
-exit 0
+record_current_prompt_id "$session_id" "$prompt_id"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 検査を通っていない報告が画面に出なかったままターンが終わらないよう、画面から隠した報告があるあいだ、報告の書き直しを求めて差し戻す。
-# 隠す条件は hold-unchecked-report.sh と同じ判定 (should_hold_message) を使う。
+# 隠したのに差し戻さない状態を作らないため、隠す条件は hold-unchecked-report.sh と同じ判定 (should_hold_message) を使う。
 # Stop から呼ばれ、stdin の JSON を受け取る。差し戻しは decision=block の JSON で出力する。
 
 set -uo pipefail

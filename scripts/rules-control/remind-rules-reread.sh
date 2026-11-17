@@ -5,7 +5,9 @@
 set -uo pipefail
 
 readonly DIALOGUE_HEADING='## [base] ユーザーへの報告と質問'
-readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
+
+# shellcheck source=read-log-common.sh
+source "$(dirname "$0")/read-log-common.sh"
 
 repo_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 rules_dir="${repo_dir}/rules"
@@ -16,10 +18,7 @@ report_template_file="${repo_dir}/templates/report.template.md"
 input=$(cat)
 session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
 prompt_id=$(printf '%s' "$input" | jq -r '.prompt_id // empty')
-if [ -n "$session_id" ] && [ -n "$prompt_id" ]; then
-  mkdir -p "$READ_LOG_DIR"
-  printf '%s\n' "$prompt_id" > "${READ_LOG_DIR}/${session_id}.prompt"
-fi
+record_current_prompt_id "$session_id" "$prompt_id"
 
 dialogue_section=$(awk -v heading="$DIALOGUE_HEADING" '
   $0 == heading { in_section = 1; print; next }

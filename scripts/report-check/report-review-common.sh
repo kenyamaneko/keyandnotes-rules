@@ -8,8 +8,10 @@ readonly VERDICT_RESOLVABLE='ルールで解決できる'
 readonly REVIEWER_MODEL='sonnet'
 readonly MIN_QUOTE_LENGTH=10
 readonly FAILURE_OUTPUT_LENGTH=500
-readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
 readonly REVIEW_SCHEMA='{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"number":{"type":"integer"},"verdict":{"type":"string","enum":["ルールで解決できる","聞いてよい"]},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"chosen_option":{"type":"string"},"explanation":{"type":"string"}},"required":["number","verdict","basis_file","basis_quote","chosen_option","explanation"]}},"concise_issues":{"type":"array","items":{"type":"object","properties":{"sentence":{"type":"string"},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"problem":{"type":"string"}},"required":["sentence","basis_file","basis_quote","problem"]}}},"required":["items","concise_issues"]}'
+
+# shellcheck source=../rules-control/read-log-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../rules-control/read-log-common.sh"
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 rules_dir="${repo_dir}/rules"
@@ -53,12 +55,14 @@ hash_message() {
     | shasum -a 256 | cut -d' ' -f1
 }
 
+# 検査を通った報告として、報告の全文のハッシュを記録する。
 record_passed_message() {
   local session_id="$1" message_hash="$2"
   mkdir -p "$READ_LOG_DIR"
   printf '%s\n' "$message_hash" >> "${READ_LOG_DIR}/${session_id}.passed"
 }
 
+# 報告が検査を通ったものと全文が一致するかを返す。
 is_passed_message() {
   local session_id="$1" message_hash="$2"
   grep -qxF -- "$message_hash" "${READ_LOG_DIR}/${session_id}.passed" 2>/dev/null
@@ -88,20 +92,16 @@ record_held_prompt() {
   printf '%s\n' "$prompt_id" > "${READ_LOG_DIR}/${session_id}.held"
 }
 
+# 隠した報告が画面に出たため、隠した事実の記録を消す。
 clear_held_prompt() {
   local session_id="$1"
   rm -f "${READ_LOG_DIR}/${session_id}.held"
 }
 
+# 同じユーザー入力で報告を隠した記録があるかを返す。
 is_prompt_held() {
   local session_id="$1" prompt_id="$2"
   [ "$(cat "${READ_LOG_DIR}/${session_id}.held" 2>/dev/null)" = "$prompt_id" ]
-}
-
-# MessageDisplay には現在のユーザー入力の ID が渡されないため、ID を記録したファイルから読む。
-read_current_prompt_id() {
-  local session_id="$1"
-  cat "${READ_LOG_DIR}/${session_id}.prompt" 2>/dev/null
 }
 
 list_unread_rule_files() {
