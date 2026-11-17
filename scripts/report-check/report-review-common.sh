@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# 報告の検査を、応答を出す前の草稿の検査 (check-report.sh) と、応答の完了時の検査 (review-report.sh) で同じ判定にするため、検査の部品をまとめる。
-# 両スクリプトから source される。
+# 草稿の検査 (check-report.sh)、報告を画面から隠す処理 (hold-unchecked-report.sh)、報告を差し戻す処理 (block-unchecked-report.sh) が同じ判定を使うため、判定の部品をまとめる。
+# 三つのスクリプトから source される。
 
-readonly CHILD_GUARD_ENV='KN_DECISION_CHECK_CHILD'
 readonly REPORT_HEADING='## 報告事項'
 readonly DECISION_HEADING='## 判断事項'
 readonly VERDICT_RESOLVABLE='ルールで解決できる'
@@ -65,16 +64,44 @@ is_passed_message() {
   grep -qxF -- "$message_hash" "${READ_LOG_DIR}/${session_id}.passed" 2>/dev/null
 }
 
-# 画面に出さなかった報告を Stop フックが再び検査せずに差し戻せるよう、違反の指摘を報告のハッシュごとに残す。
-save_review_reasons() {
-  local session_id="$1" message_hash="$2" reasons="$3"
-  mkdir -p "$READ_LOG_DIR"
-  printf '%s' "$reasons" > "${READ_LOG_DIR}/${session_id}.reasons.${message_hash}"
+readonly MAX_BLOCKS_PER_PROMPT=5
+
+# 報告を画面から隠す (MessageDisplay) と差し戻す (Stop) を同じ判定にし、隠したのに差し戻さない状態を作らないため、判定を一か所に置く。
+# 検査を通っていない (草稿の検査を通した報告と全文が一致しない) 報告で、同じユーザー入力への差し戻しが上限に達していなければ、隠して差し戻す。
+should_hold_message() {
+  local message="$1" session_id="$2" prompt_id="$3"
+  is_report_message "$message" || return 1
+  is_passed_message "$session_id" "$(hash_message "$message")" && return 1
+  has_blocks_remaining "$session_id" "$prompt_id"
 }
 
-load_review_reasons() {
-  local session_id="$1" message_hash="$2"
-  cat "${READ_LOG_DIR}/${session_id}.reasons.${message_hash}" 2>/dev/null
+# 差し戻しの再試行が終わらず費用が増え続けるのを防ぐため、同じユーザー入力への差し戻しに上限を置く。
+has_blocks_remaining() {
+  local session_id="$1" prompt_id="$2"
+  [ "$(count_lines_in_log "${READ_LOG_DIR}/${session_id}.blocks" "$prompt_id")" -lt "$MAX_BLOCKS_PER_PROMPT" ]
+}
+
+# 画面に出す応答の最後が報告でなくても、同じユーザー入力で隠した報告が画面に出るまで Stop フックが差し戻せるよう、隠した事実を残す。
+record_held_prompt() {
+  local session_id="$1" prompt_id="$2"
+  mkdir -p "$READ_LOG_DIR"
+  printf '%s\n' "$prompt_id" > "${READ_LOG_DIR}/${session_id}.held"
+}
+
+clear_held_prompt() {
+  local session_id="$1"
+  rm -f "${READ_LOG_DIR}/${session_id}.held"
+}
+
+is_prompt_held() {
+  local session_id="$1" prompt_id="$2"
+  [ "$(cat "${READ_LOG_DIR}/${session_id}.held" 2>/dev/null)" = "$prompt_id" ]
+}
+
+# MessageDisplay には現在のユーザー入力の ID が渡されないため、ID を記録したファイルから読む。
+read_current_prompt_id() {
+  local session_id="$1"
+  cat "${READ_LOG_DIR}/${session_id}.prompt" 2>/dev/null
 }
 
 list_unread_rule_files() {
@@ -119,7 +146,7 @@ run_reviewer() {
   work_dir=$(mktemp -d) || return 1
   (
     cd "$work_dir" || exit 1
-    env "${CHILD_GUARD_ENV}=1" claude -p "$prompt" \
+    claude -p "$prompt" \
       --model "$REVIEWER_MODEL" \
       --settings '{"disableAllHooks": true}' \
       --setting-sources "" \
