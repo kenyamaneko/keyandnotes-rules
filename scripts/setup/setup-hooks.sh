@@ -4,7 +4,6 @@
 set -euo pipefail
 
 readonly DEFAULT_SETTINGS_FILE="${HOME}/.claude/settings.json"
-readonly REVIEW_REPORT_TIMEOUT_SECONDS=180
 
 # worktree から実行しても、worktree を消したときにフックが壊れないよう、登録するパスは本体のチェックアウトにする。
 git_common_dir="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --path-format=absolute --git-common-dir)"
@@ -18,13 +17,13 @@ mkdir -p "$(dirname "$settings_file")"
 registered=$(jq \
   --arg dir "${scripts_dir}/" \
   --arg remind "${scripts_dir}/rules-control/remind-rules-reread.sh" \
-  --arg review "${scripts_dir}/report-check/review-report.sh" \
+  --arg review "${scripts_dir}/report-check/block-unchecked-report.sh" \
   --arg record "${scripts_dir}/rules-control/record-rules-read.sh" \
+  --arg current_prompt "${scripts_dir}/rules-control/record-current-prompt.sh" \
   --arg guard "${scripts_dir}/rules-control/guard-rules-edit.sh" \
   --arg machine_audit "${scripts_dir}/commit-audit/pre-commit-machine-audit.sh" \
   --arg claude_audit "${scripts_dir}/commit-audit/pre-commit-claude-audit.sh" \
-  --arg hold "${scripts_dir}/report-check/hold-unchecked-report.sh" \
-  --argjson review_timeout "$REVIEW_REPORT_TIMEOUT_SECONDS" '
+  --arg hold "${scripts_dir}/report-check/hold-unchecked-report.sh" '
   def register($event; $entry):
     .hooks[$event] = ((.hooks[$event] // []) + [$entry]);
   .hooks = (
@@ -32,11 +31,11 @@ registered=$(jq \
     | map_values(map(.hooks |= map(select((.command // "") | startswith($dir) | not))) | map(select(.hooks | length > 0)))
     | with_entries(select(.value | length > 0)))
   | register("UserPromptSubmit"; {hooks: [{type: "command", command: $remind}]})
-  | register("Stop"; {hooks: [{type: "command", command: $review, timeout: $review_timeout}]})
-  | register("MessageDisplay"; {hooks: [{type: "command", command: $hold, timeout: $review_timeout}]})
+  | register("Stop"; {hooks: [{type: "command", command: $review}]})
+  | register("MessageDisplay"; {hooks: [{type: "command", command: $hold}]})
   | register("PostToolUse"; {matcher: "Read", hooks: [{type: "command", command: $record}]})
   | register("PreToolUse"; {matcher: "Edit|Write", hooks: [{type: "command", command: $guard}]})
-  | register("PreToolUse"; {matcher: "Bash", hooks: [{type: "command", command: $machine_audit}, {type: "command", command: $claude_audit}]})
+  | register("PreToolUse"; {matcher: "Bash", hooks: [{type: "command", command: $current_prompt}, {type: "command", command: $machine_audit}, {type: "command", command: $claude_audit}]})
 ' "$settings_file")
 
 printf '%s\n' "$registered" > "$settings_file"

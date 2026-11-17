@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Stop フック (review-report.sh) が、ルールを読んだかをユーザー入力ごとに確かめられるように、Read したファイルを記録する。
+# 草稿の検査 (check-report.sh) が、ルールを読んだかをユーザー入力ごとに確かめられるように、Read したファイルを記録する。
 # PostToolUse (Read matcher) から呼ばれ、stdin の JSON を受け取る。
 
 set -uo pipefail
 
-readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
+# shellcheck source=read-log-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/read-log-common.sh"
 
 input=$(cat)
 
