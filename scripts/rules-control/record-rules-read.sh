@@ -10,8 +10,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/read-log-common.sh"
 input=$(cat)
 
 session_id=$(printf '%s' "$input" | jq -r '.session_id')
-prompt_id=$(printf '%s' "$input" | jq -r '.prompt_id')
 file_path=$(printf '%s' "$input" | jq -r '.tool_input.file_path')
+
+prompt_id=$(read_current_prompt_id "$session_id")
 
 mkdir -p "$READ_LOG_DIR"
 printf '%s\t%s\n' "$prompt_id" "$file_path" >> "${READ_LOG_DIR}/${session_id}.tsv"

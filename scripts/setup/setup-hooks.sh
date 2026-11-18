@@ -19,7 +19,6 @@ registered=$(jq \
   --arg remind "${scripts_dir}/rules-control/remind-rules-reread.sh" \
   --arg review "${scripts_dir}/report-check/block-unchecked-report.sh" \
   --arg record "${scripts_dir}/rules-control/record-rules-read.sh" \
-  --arg current_prompt "${scripts_dir}/rules-control/record-current-prompt.sh" \
   --arg guard "${scripts_dir}/rules-control/guard-rules-edit.sh" \
   --arg machine_audit "${scripts_dir}/commit-audit/pre-commit-machine-audit.sh" \
   --arg claude_audit "${scripts_dir}/commit-audit/pre-commit-claude-audit.sh" \
@@ -35,7 +34,7 @@ registered=$(jq \
   | register("MessageDisplay"; {hooks: [{type: "command", command: $hold}]})
   | register("PostToolUse"; {matcher: "Read", hooks: [{type: "command", command: $record}]})
   | register("PreToolUse"; {matcher: "Edit|Write", hooks: [{type: "command", command: $guard}]})
-  | register("PreToolUse"; {matcher: "Bash", hooks: [{type: "command", command: $current_prompt}, {type: "command", command: $machine_audit}, {type: "command", command: $claude_audit}]})
+  | register("PreToolUse"; {matcher: "Bash", hooks: [{type: "command", command: $machine_audit}, {type: "command", command: $claude_audit}]})
 ' "$settings_file")
 
 printf '%s\n' "$registered" > "$settings_file"

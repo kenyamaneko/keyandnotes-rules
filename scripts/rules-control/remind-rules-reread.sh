@@ -6,19 +6,10 @@ set -uo pipefail
 
 readonly DIALOGUE_HEADING='## [base] ユーザーへの報告と質問'
 
-# shellcheck source=read-log-common.sh
-source "$(dirname "$0")/read-log-common.sh"
-
 repo_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 rules_dir="${repo_dir}/rules"
 principles_file="${rules_dir}/principles.md"
 report_template_file="${repo_dir}/templates/report.template.md"
-
-# 草稿の検査 (check-report.sh) が、ユーザー入力ごとの Read の記録と照らせるよう、現在のユーザー入力の ID を残す。
-input=$(cat)
-session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
-prompt_id=$(printf '%s' "$input" | jq -r '.prompt_id // empty')
-record_current_prompt_id "$session_id" "$prompt_id"
 
 dialogue_section=$(awk -v heading="$DIALOGUE_HEADING" '
   $0 == heading { in_section = 1; print; next }

@@ -1,22 +1,14 @@
 #!/usr/bin/env bash
-# 現在のユーザー入力の ID を、記録する側 (remind-rules-reread.sh・record-current-prompt.sh) と読む側 (report-review-common.sh・check-report.sh) が同じ場所で読み書きするため、記録の場所と読み書きをまとめる。
-# それらのスクリプトと record-rules-read.sh から source される。
+# 現在のユーザー入力の ID を、どのスクリプトも同じ方法で読むため、読み方と記録の場所をまとめる。
 
 readonly READ_LOG_DIR="${HOME}/.claude/kn-read-log"
+readonly CLAUDE_PROJECTS_DIR="${HOME}/.claude/projects"
+readonly HUMAN_ENTRY_MARKER='"origin":{"kind":"human"'
 
-# 現在のユーザー入力の ID を記録する。セッションの ID かユーザー入力の ID が空なら、記録できないことを標準エラー出力に出して 1 を返す。
-record_current_prompt_id() {
-  local session_id="$1" prompt_id="$2"
-  if [ -z "$session_id" ] || [ -z "$prompt_id" ]; then
-    printf '現在のユーザー入力の ID を記録できない。フックの入力にセッションの ID かユーザー入力の ID が無い。\n' >&2
-    return 1
-  fi
-  mkdir -p "$READ_LOG_DIR"
-  printf '%s\n' "$prompt_id" > "${READ_LOG_DIR}/${session_id}.prompt"
-}
-
-# 記録した現在のユーザー入力の ID を返す。記録が無ければ何も返さない。
+# 現在のユーザー入力の ID として、会話の記録ファイルの最後の、人が送った発言の uuid を返す。
+# 人が送った発言とは、発言の送り手の種類 (origin.kind) が human のエントリを指す。ツールの結果・フックの差し戻し・バックグラウンド作業の通知は含まない。
 read_current_prompt_id() {
-  local session_id="$1"
-  cat "${READ_LOG_DIR}/${session_id}.prompt" 2>/dev/null
+  local session_id="$1" transcript_file
+  transcript_file=$(ls "${CLAUDE_PROJECTS_DIR}"/*/"${session_id}.jsonl" 2>/dev/null | head -n 1)
+  grep -F -- "$HUMAN_ENTRY_MARKER" "$transcript_file" | tail -n 1 | jq -r '.uuid'
 }
