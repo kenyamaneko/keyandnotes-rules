@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 差し戻しの再報告をユーザーに見せないため、応答を出す前に報告の草稿を検査する。
-# 使い方: check-report.sh <草稿のファイル>。草稿には最終の応答の全文を書く。
+# 使い方: check-report.sh <草稿のファイル> [報告用の HTML のファイル]。草稿には最終の応答の全文を書く。
+# 依頼事項に報告用の HTML の場所を書く報告は、その HTML のファイルも渡して、報告と一緒に検査する。
 # 通れば、草稿の記録を残して 0 を返す。違反があれば指摘を出して 1、検査の失敗や前提の欠落は 2 を返す。
 
 set -uo pipefail
@@ -38,7 +39,7 @@ main() {
   mkdir -p "$READ_LOG_DIR"
   printf '%s\n' "$prompt_id" >> "$checks_file"
 
-  local message reasons review_status
+  local html_file="${2:-}" message html="" reasons review_status
   message=$(cat "$draft_file")
 
   if ! is_report_message "$message"; then
@@ -46,7 +47,17 @@ main() {
     return "$STATUS_FAILURE"
   fi
 
-  reasons=$(review_message "$message" "$session_id" "$prompt_id")
+  if [ -n "$html_file" ] && [ ! -f "$html_file" ]; then
+    printf '報告用の HTML のファイル (%s) が無い。2 つ目の引数に、HTML のファイルの正しい場所を渡す。\n' "$html_file" >&2
+    return "$STATUS_FAILURE"
+  fi
+  if [ -z "$html_file" ] && has_html_location_in_request "$message"; then
+    printf '依頼事項に報告用の HTML の場所が書かれているが、HTML のファイルが渡されていない。check-report.sh の 2 つ目の引数に HTML のファイルを渡して、もう一度検査する。\n'
+    return "$STATUS_VIOLATION"
+  fi
+  [ -n "$html_file" ] && html=$(cat "$html_file")
+
+  reasons=$(review_message "$message" "$session_id" "$prompt_id" "$html")
   review_status=$?
   if [ "$review_status" -ne 0 ]; then
     record_check_failure "$session_id" "$prompt_id"

@@ -12,7 +12,7 @@ emit_block() {
   local session_id="$1" prompt_id="$2"
   mkdir -p "$READ_LOG_DIR"
   printf '%s\n' "$prompt_id" >> "${READ_LOG_DIR}/${session_id}.blocks"
-  jq -nc --arg reason "報告が検査を通っていないため、画面に出ていない。応答の全文を草稿のファイルに書き、${repo_dir}/scripts/report-check/check-report.sh に草稿のファイルを渡して実行する。違反が出たら草稿を直して通るまで繰り返し、通ったら草稿の全文をそのまま最終の応答として出す。" \
+  jq -nc --arg reason "報告が検査を通っていないため、画面に出ていない。応答の全文を草稿のファイルに書き、${repo_dir}/scripts/report-check/check-report.sh に草稿のファイルを渡して実行する。依頼事項に報告用の HTML の場所を書くときは、その HTML のファイルも 2 つ目の引数に渡す。違反が出たら草稿を直して通るまで繰り返し、通ったら草稿の全文をそのまま最終の応答として出す。" \
     '{decision: "block", reason: $reason}'
 }
 

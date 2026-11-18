@@ -4,12 +4,16 @@
 
 readonly REPORT_HEADING='## 報告事項'
 readonly DECISION_HEADING='## 判断事項'
+readonly REQUEST_HEADING='## 依頼事項'
+readonly HTML_LOCATION_PATTERN='\.html|claude\.ai/(code/)?artifact/'
 readonly VERDICT_RESOLVABLE='ルールで解決できる'
 readonly REVIEWER_MODEL='sonnet'
 readonly UNCHECKED_REPORT_NOTICE='報告の検査を通せなかったため、検査を通っていない報告をそのまま表示する。'
 readonly MIN_QUOTE_LENGTH=10
 readonly FAILURE_OUTPUT_LENGTH=500
-readonly REVIEW_SCHEMA='{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"number":{"type":"integer"},"verdict":{"type":"string","enum":["ルールで解決できる","聞いてよい"]},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"chosen_option":{"type":"string"},"explanation":{"type":"string"}},"required":["number","verdict","basis_file","basis_quote","chosen_option","explanation"]}},"concise_issues":{"type":"array","items":{"type":"object","properties":{"sentence":{"type":"string"},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"problem":{"type":"string"}},"required":["sentence","basis_file","basis_quote","problem"]}}},"required":["items","concise_issues"]}'
+readonly ISSUE_SCHEMA='{"type":"array","items":{"type":"object","properties":{"sentence":{"type":"string"},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"problem":{"type":"string"}},"required":["sentence","basis_file","basis_quote","problem"]}}'
+readonly ITEM_SCHEMA='{"type":"array","items":{"type":"object","properties":{"number":{"type":"integer"},"verdict":{"type":"string","enum":["ルールで解決できる","聞いてよい"]},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"chosen_option":{"type":"string"},"explanation":{"type":"string"}},"required":["number","verdict","basis_file","basis_quote","chosen_option","explanation"]}}'
+readonly REVIEW_SCHEMA="{\"type\":\"object\",\"properties\":{\"items\":${ITEM_SCHEMA},\"concise_issues\":${ISSUE_SCHEMA},\"document_issues\":${ISSUE_SCHEMA}},\"required\":[\"items\",\"concise_issues\",\"document_issues\"]}"
 
 # shellcheck source=../rules-control/read-log-common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../rules-control/read-log-common.sh"
@@ -18,14 +22,26 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 rules_dir="${repo_dir}/rules"
 templates_dir="${repo_dir}/templates"
 principles_file="${rules_dir}/principles.md"
+documentation_file="${rules_dir}/documentation.md"
 report_template_file="${templates_dir}/report.template.md"
 
-extract_decision_section() {
-  awk -v heading="$DECISION_HEADING" '
+extract_section() {
+  local heading="$1"
+  awk -v heading="$heading" '
     $0 == heading { in_section = 1; next }
     in_section && /^## / { exit }
     in_section { print }
   '
+}
+
+extract_decision_section() {
+  extract_section "$DECISION_HEADING"
+}
+
+# 報告の項目の詳細を報告用の HTML に書くと、依頼事項にその場所 (ファイルか公開した URL) を書く。依頼事項に HTML の場所があるかで、検査に HTML が要るかを決める。
+has_html_location_in_request() {
+  local message="$1"
+  printf '%s\n' "$message" | extract_section "$REQUEST_HEADING" | grep -qE -- "$HTML_LOCATION_PATTERN"
 }
 
 # 報告ではない応答に無関係な指摘を出さないため、報告か判断事項の項目を含む応答だけを検査の対象にする。
@@ -143,10 +159,16 @@ list_unread_rule_files() {
 }
 
 build_reviewer_prompt() {
-  local message="$1"
+  local message="$1" html="$2" html_section=""
+  if [ -n "$html" ]; then
+    html_section="
+報告用の HTML (ソース):
+${html}
+"
+  fi
   cat <<EOF
 あなたは、ユーザーへの報告を検査するレビュアーである。
-最初に ${principles_file} と ${report_template_file} を Read で全文読む。そのあと、下の報告について次の二つを検査する。
+最初に ${principles_file}・${documentation_file}・${report_template_file} を Read で全文読む。そのあと、下の報告について次の三つを検査する。
 
 検査1: 判断事項の各項目が、ユーザーに聞くべきでない項目かを判定する。判断事項の項目がなければ、items を空の配列にする。
 判定基準 (ユーザーの指示、原文):
@@ -159,12 +181,15 @@ B修正すればよくなるけど、ーーを書き換える手間が発生
 verdict が「${VERDICT_RESOLVABLE}」のときは、basis_file に根拠のファイルの絶対パス、basis_quote に根拠の条文を一行分そのまま (要約や複数行の連結をせず) 引用し、chosen_option に選ぶ案の記号を書く。
 verdict が「聞いてよい」のときは、basis_file・basis_quote・chosen_option を空文字にする。
 
-検査2: 報告全体 (判断事項以外を含む) に、${principles_file} の「## [base] ユーザーへの報告と質問」の節のうち、報告を簡潔に書くことに関わる条文へ違反している文があれば、concise_issues に書く。節の条文を上から一つずつ報告に当てはめて、見落としをなくす。
-sentence に違反している文を一行分そのまま (要約や複数行の連結をせず) 引用し、basis_file に根拠のファイルの絶対パス、basis_quote に根拠の条文を一行分そのまま引用し、problem に何が違反かを書く。
+検査2: 報告全体 (判断事項以外を含む) と、報告用の HTML があればその本文に、${principles_file} の「## [base] ユーザーへの報告と質問」の節のうち、報告を簡潔に書くことに関わる条文へ違反している文があれば、concise_issues に書く。節の条文を上から一つずつ報告と HTML に当てはめて、見落としをなくす。
+sentence に違反している文を一行分そのまま (要約や複数行の連結をせず) 引用し、basis_file に根拠のファイルの絶対パス、basis_quote に根拠の条文を一行分そのまま引用し、problem に何が違反かを書く。HTML の文は、タグを含めず、ソースの一行に収まる範囲で引用する。
 根拠の条文を示せない指摘は書かない。違反がなければ concise_issues を空の配列にする。
+
+検査3: 報告用の HTML の本文に、${documentation_file} の条文 (「## 適用範囲」の節で HTML に適用すると定めたもの) へ違反している文があれば、document_issues に書く。条文を上から一つずつ HTML に当てはめて、見落としをなくす。書き方は検査2と同じにする。報告用の HTML が無いときは document_issues を空の配列にする。
 
 報告:
 ${message}
+${html_section}
 EOF
 }
 
@@ -227,8 +252,9 @@ collect_decision_reasons() {
   done < <(printf '%s' "$review_json" | jq -c --arg verdict "$VERDICT_RESOLVABLE" '.items[] | select(.verdict == $verdict)')
 }
 
-collect_concise_reasons() {
-  local review_json="$1" message="$2" issue sentence quote basis_file problem
+# 簡潔さの指摘 (concise_issues) と文書の書き方の指摘 (document_issues) は同じ形のため、指摘の種類を引数で受けて同じ処理で出す。
+collect_issue_reasons() {
+  local review_json="$1" message="$2" issues_key="$3" label="$4" issue sentence quote basis_file problem
   while IFS= read -r issue; do
     sentence=$(printf '%s' "$issue" | jq -r '.sentence')
     quote=$(printf '%s' "$issue" | jq -r '.basis_quote')
@@ -236,13 +262,13 @@ collect_concise_reasons() {
     is_quote_in_rules "$quote" || continue
     basis_file=$(printf '%s' "$issue" | jq -r '.basis_file')
     problem=$(printf '%s' "$issue" | jq -r '.problem')
-    printf '簡潔さの指摘: 「%s」は、%s の「%s」に反する。%s\n\n' "$sentence" "$basis_file" "$quote" "$problem"
-  done < <(printf '%s' "$review_json" | jq -c '.concise_issues[]')
+    printf '%s: 「%s」は、%s の「%s」に反する。%s\n\n' "$label" "$sentence" "$basis_file" "$quote" "$problem"
+  done < <(printf '%s' "$review_json" | jq -c --arg key "$issues_key" '.[$key][]')
 }
 
 # 呼び出し側が違反と検査の失敗を見分けられるよう、違反の指摘は標準出力に出し、検査の失敗は標準エラー出力に出して 2 を返す。
 review_message() {
-  local message="$1" session_id="$2" prompt_id="$3"
+  local message="$1" session_id="$2" prompt_id="$3" html="${4:-}"
   local reasons="" unread_files reviewer_output reviewer_status review_json
 
   if has_decision_items "$message"; then
@@ -255,7 +281,7 @@ ${unread_files}
     fi
   fi
 
-  reviewer_output=$(run_reviewer "$(build_reviewer_prompt "$message")" 2>&1)
+  reviewer_output=$(run_reviewer "$(build_reviewer_prompt "$message" "$html")" 2>&1)
   reviewer_status=$?
   review_json=$(printf '%s' "$reviewer_output" | jq -c '.structured_output' 2>/dev/null)
 
@@ -265,11 +291,14 @@ ${unread_files}
     return 2
   fi
 
-  local decision_reasons concise_reasons
+  local decision_reasons concise_reasons document_reasons quotable_text
+  quotable_text="${message}"$'\n'"${html}"
   decision_reasons=$(collect_decision_reasons "$review_json")
-  concise_reasons=$(collect_concise_reasons "$review_json" "$message")
+  concise_reasons=$(collect_issue_reasons "$review_json" "$quotable_text" concise_issues '簡潔さの指摘')
+  document_reasons=$(collect_issue_reasons "$review_json" "$html" document_issues '報告用の HTML の書き方の指摘')
   [ -n "$decision_reasons" ] && reasons+="${decision_reasons}"$'\n\n'
   [ -n "$concise_reasons" ] && reasons+="${concise_reasons}"$'\n\n'
+  [ -n "$document_reasons" ] && reasons+="${document_reasons}"$'\n\n'
   [ -n "$reasons" ] && printf '%s' "$reasons"
   return 0
 }
