@@ -81,7 +81,7 @@ should_hold_message() {
   has_blocks_remaining "$session_id" "$prompt_id"
 }
 
-# 検査コマンドが失敗すると報告を検査に通せず、隠し続けても画面に出せないため、報告を隠さず表示できるよう、同じユーザー入力で検査コマンドが失敗した事実を記録する。
+# 検査コマンドが失敗した報告は隠し続けても画面に出せないため、同じユーザー入力で検査コマンドが失敗した事実を記録する。
 record_check_failure() {
   local session_id="$1" prompt_id="$2"
   mkdir -p "$READ_LOG_DIR"
@@ -113,6 +113,12 @@ record_held_prompt() {
 clear_held_prompt() {
   local session_id="$1"
   rm -f "${READ_LOG_DIR}/${session_id}.held" "${READ_LOG_DIR}/${session_id}.held-report"
+}
+
+# 検査を通っていない報告を、警告つきの文面にして返す。
+format_unchecked_report() {
+  local report="$1"
+  printf '%s\n\n%s' "$UNCHECKED_REPORT_NOTICE" "$report"
 }
 
 # 隠した報告の全文を返す。

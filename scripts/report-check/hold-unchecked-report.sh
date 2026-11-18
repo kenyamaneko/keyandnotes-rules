@@ -44,7 +44,7 @@ main() {
     if is_passed_message "$session_id" "$(hash_message "$message")"; then
       emit_display < "$buffer_file"
     else
-      { printf '%s\n\n' "$UNCHECKED_REPORT_NOTICE"; cat "$buffer_file"; } | emit_display
+      format_unchecked_report "$message" | emit_display
     fi
   else
     emit_display < "$buffer_file"

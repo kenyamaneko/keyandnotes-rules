@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # 検査を通っていない報告が画面に出なかったままターンが終わらないよう、画面から隠した報告があるあいだ、報告の書き直しを求めて差し戻す。
-# 差し戻しの上限に達した、または検査コマンドが失敗したあとも隠した報告が画面に出ていなければ、保存した報告を警告つきでユーザーに出す。
 # 隠したのに差し戻さない状態を作らないため、隠す条件は hold-unchecked-report.sh と同じ判定 (should_hold_message) を使う。
 # Stop から呼ばれ、stdin の JSON を受け取る。差し戻しは decision=block の JSON で、保存した報告の表示は systemMessage の JSON で出力する。
 
@@ -18,9 +17,12 @@ emit_block() {
 }
 
 emit_held_report() {
-  local session_id="$1"
-  read_held_report "$session_id" | jq -nc --arg notice "$UNCHECKED_REPORT_NOTICE" --rawfile report /dev/stdin \
-    '{systemMessage: ($notice + "\n\n" + $report)}'
+  local session_id="$1" report
+  report=$(read_held_report "$session_id") || {
+    printf '隠した報告の全文の記録を読めない。報告が画面に出ていないため、報告の依頼事項に、記録を保存する処理 (hold-unchecked-report.sh) の修正を書く。\n' >&2
+    return 1
+  }
+  jq -nc --arg text "$(format_unchecked_report "$report")" '{systemMessage: $text}'
   clear_held_prompt "$session_id"
 }
 
