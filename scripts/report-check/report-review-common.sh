@@ -162,7 +162,7 @@ build_reviewer_prompt() {
   local message="$1" html="$2" html_section=""
   if [ -n "$html" ]; then
     html_section="
-報告用の HTML (ソース):
+報告用の HTML (タグを除いた本文のテキスト):
 ${html}
 "
   fi
@@ -182,7 +182,7 @@ verdict が「${VERDICT_RESOLVABLE}」のときは、basis_file に根拠のフ�
 verdict が「聞いてよい」のときは、basis_file・basis_quote・chosen_option を空文字にする。
 
 検査2: 報告全体 (判断事項以外を含む) と、報告用の HTML があればその本文に、${principles_file} の「## [base] ユーザーへの報告と質問」の節のうち、報告を簡潔に書くことに関わる条文へ違反している文があれば、concise_issues に書く。節の条文を上から一つずつ報告と HTML に当てはめて、見落としをなくす。
-sentence に違反している文を一行分そのまま (要約や複数行の連結をせず) 引用し、basis_file に根拠のファイルの絶対パス、basis_quote に根拠の条文を一行分そのまま引用し、problem に何が違反かを書く。HTML の文は、タグを含めず、ソースの一行に収まる範囲で引用する。
+sentence に違反している文を一行分そのまま (要約や複数行の連結をせず) 引用し、basis_file に根拠のファイルの絶対パス、basis_quote に根拠の条文を一行分そのまま引用し、problem に何が違反かを書く。HTML の文は、本文のテキストの一行に収まる範囲で引用する。
 根拠の条文を示せない指摘は書かない。違反がなければ concise_issues を空の配列にする。
 
 検査3: 報告用の HTML の本文に、${documentation_file} の条文 (「## 適用範囲」の節で HTML に適用すると定めたもの) へ違反している文があれば、document_issues に書く。条文を上から一つずつ HTML に当てはめて、見落としをなくす。書き方は検査2と同じにする。報告用の HTML が無いときは document_issues を空の配列にする。

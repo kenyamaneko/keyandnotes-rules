@@ -55,7 +55,13 @@ main() {
     printf '依頼事項に報告用の HTML の場所が書かれているが、HTML のファイルが渡されていない。check-report.sh の 2 つ目の引数に HTML のファイルを渡して、もう一度検査する。\n'
     return "$STATUS_VIOLATION"
   fi
-  [ -n "$html_file" ] && html=$(cat "$html_file")
+  if [ -n "$html_file" ]; then
+    # 太字などのタグをまたぐ文を、レビュアーの引用と照合できるようにするため、HTML のタグを除いた本文のテキストを検査する。
+    html=$(python3 -I "$(dirname "${BASH_SOURCE[0]}")/extract-html-text.py" "$html_file") || {
+      printf '報告用の HTML (%s) から本文のテキストを取り出せなかった。HTML のファイルの内容を直して、もう一度検査する。\n' "$html_file" >&2
+      return "$STATUS_FAILURE"
+    }
+  fi
 
   reasons=$(review_message "$message" "$session_id" "$prompt_id" "$html")
   review_status=$?
