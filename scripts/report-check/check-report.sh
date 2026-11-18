@@ -36,6 +36,7 @@ main() {
   local checks_file="${READ_LOG_DIR}/${session_id}.checks"
   if [ "$(count_lines_in_log "$checks_file" "$prompt_id")" -ge "$MAX_CHECKS_PER_PROMPT" ]; then
     printf '同じユーザー入力への検査が上限 (%s 回) に達した。報告の依頼事項に、検査が通らない原因を書く。\n' "$MAX_CHECKS_PER_PROMPT" >&2
+    record_check_failure "$session_id" "$prompt_id"
     return "$STATUS_FAILURE"
   fi
   mkdir -p "$READ_LOG_DIR"
@@ -52,6 +53,7 @@ main() {
   reasons=$(review_message "$message" "$session_id" "$prompt_id")
   review_status=$?
   if [ "$review_status" -ne 0 ]; then
+    record_check_failure "$session_id" "$prompt_id"
     return "$STATUS_FAILURE"
   fi
 
