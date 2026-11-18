@@ -4,7 +4,8 @@
 set -uo pipefail
 
 readonly AUDIT_LOG_DIR="${HOME}/.claude/audit-logs"
-readonly AUDIT_LOG_FILE="${AUDIT_LOG_DIR}/pre-commit-claude-audit.log"
+AUDIT_LOG_FILE="${AUDIT_LOG_DIR}/pre-commit-claude-audit-$(date '+%Y-%m-%d').log"
+readonly AUDIT_LOG_FILE
 readonly DIFF_CONTEXT_LINES=10
 readonly DEFAULT_OVERLAY_DIR="rules"
 
@@ -38,6 +39,46 @@ readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/commit-audit/claude-audit-common
 # shellcheck source=/dev/null
 source "$COMMON_LIB" || { printf '⚠️  pre-commit-claude-audit: 共有ロジック (%s) を読み込めない。監査不能のため fail-safe で commit ブロック。\n' "$COMMON_LIB" >&2; exit 2; }
 
+readonly AUDIT_LOG_BAR_WIDTH=80
+readonly AUDIT_LOG_DETAIL_INDENT_WIDTH=16
+
+repeat_char() {
+  printf '%*s' "$2" '' | tr ' ' "$1"
+}
+
+AUDIT_LOG_ENTRY_TOP_BAR="$(repeat_char '#' "$AUDIT_LOG_BAR_WIDTH")"
+AUDIT_LOG_ENTRY_BOTTOM_BAR="$(repeat_char '=' "$AUDIT_LOG_BAR_WIDTH")"
+AUDIT_LOG_DETAIL_INDENT="$(repeat_char ' ' "$AUDIT_LOG_DETAIL_INDENT_WIDTH")"
+readonly AUDIT_LOG_ENTRY_TOP_BAR AUDIT_LOG_ENTRY_BOTTOM_BAR AUDIT_LOG_DETAIL_INDENT
+readonly VIOLATION_JQ_DEFINITIONS='def is_autofix: .clarity == "obvious" and .fix_safety == "safe";
+def clarity_label: if .clarity == "obvious" then "🟢明白" else "🟡解釈次第" end;
+def safety_label: if .fix_safety == "safe" then "🟢実害なし" else "🔴実害ありうる" end;
+def kind_label: if is_autofix then "自律修正" else "要確認" end;'
+readonly AUDIT_LOG_ENTRY_FORMAT="${VIOLATION_JQ_DEFINITIONS}"'
+{deny: "自律修正してから再 commit (deny)", ask: "確認が必要 (ask)"} as $decision_labels
+| sort_by(if is_autofix then 0 else 1 end) as $items
+| ($items | length) as $total
+| ($items | map(select(is_autofix)) | length) as $autofix_count
+| [
+    $top_bar,
+    "# 監査 \($time)",
+    "# 対象リポジトリ: \($repo)",
+    "# 判定: \($decision_labels[$decision])",
+    "# 指摘: \($total) 件 (自律修正 \($autofix_count) 件 / 要確認 \($total - $autofix_count) 件)",
+    $top_bar,
+    ""
+  ] + [
+    $items | to_entries[] | .key as $index | .value
+    | "[指摘 \($index + 1)/\($total)] \(kind_label)\n"
+      + "  ファイル:     \(.file) の \(.line) 行目\n"
+      + "  違反したルール: \(.rule)\n"
+      + "  明白度:       \(clarity_label)\n"
+      + "  是正の安全性:  \(safety_label)\n"
+      + "  該当箇所:     \(.evidence | gsub("\n"; "\n" + $detail_indent))\n"
+      + "  理由:         \(.why)\n"
+  ] + [$bottom_bar]
+| join("\n")'
+
 readonly AUDIT_SCHEMA='{
   "type": "object",
   "required": ["violations"],
@@ -63,14 +104,21 @@ readonly AUDIT_SCHEMA='{
   }
 }'
 
-# 確認ダイアログの理由は保存されないため、ログに追記する。
-log_audit_reason() {
-  local decision="$1" repo="$2" text="$3"
-  mkdir -p "$AUDIT_LOG_DIR" || return 0
+# deny の確認ダイアログには要確認の指摘が出ないため、全指摘をログに追記する。
+log_audit_entry() {
+  local decision="$1" repo="$2" violations="$3"
+  mkdir -p "$AUDIT_LOG_DIR" || return 1
   {
-    printf '\n=== %s | decision=%s | target=%s ===\n' "$(date '+%Y-%m-%d %H:%M:%S %z')" "$decision" "$repo"
-    printf '%s\n' "$text"
-  } >> "$AUDIT_LOG_FILE" || true
+    printf '\n\n'
+    printf '%s' "$violations" | jq -r \
+      --arg decision "$decision" \
+      --arg repo "$repo" \
+      --arg time "$(date '+%Y-%m-%d %H:%M:%S %z')" \
+      --arg top_bar "$AUDIT_LOG_ENTRY_TOP_BAR" \
+      --arg bottom_bar "$AUDIT_LOG_ENTRY_BOTTOM_BAR" \
+      --arg detail_indent "$AUDIT_LOG_DETAIL_INDENT" \
+      "$AUDIT_LOG_ENTRY_FORMAT"
+  } >> "$AUDIT_LOG_FILE"
 }
 
 fail_closed() {
@@ -207,7 +255,7 @@ audit_staged_files() {
 }
 
 format_violations() {
-  jq -r '.[] | "- \(.file):\(.line)  [明白度: \(if .clarity == "obvious" then "明白" else "解釈次第" end) / 是正の安全性: \(if .fix_safety == "safe" then "実害なし" else "実害ありうる" end)]\n    rule: \(.rule)\n    evidence: \(.evidence)\n    why: \(.why)"'
+  jq -r "${VIOLATION_JQ_DEFINITIONS}"' .[] | "- \(.file):\(.line)  [明白度: \(clarity_label) / 是正の安全性: \(safety_label)]\n    rule: \(.rule)\n    evidence: \(.evidence)\n    why: \(.why)"'
 }
 
 # 確認ダイアログは長い理由の後半を省略するため、指摘ごとの 1 行の一覧を詳細より前に出す。
@@ -217,7 +265,7 @@ format_violation_summary() {
 
 emit_decision() {
   local decision="$1" reason="$2"
-  log_audit_reason "$decision" "$repo_name" "$reason"
+  log_audit_entry "$decision" "$repo_name" "$all_violations" || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
   jq -nc --arg d "$decision" --arg r "$reason" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: $d, permissionDecisionReason: $r}}'
   exit 0
 }
@@ -318,8 +366,8 @@ audit_staged_files
 violations_count=$(printf '%s' "$all_violations" | jq 'length')
 [ "$violations_count" -eq 0 ] && exit 0
 
-autofix=$(printf '%s' "$all_violations" | jq -c '[.[] | select(.clarity == "obvious" and .fix_safety == "safe")]')
-escalate=$(printf '%s' "$all_violations" | jq -c '[.[] | select(.clarity != "obvious" or .fix_safety != "safe")]')
+autofix=$(printf '%s' "$all_violations" | jq -c "${VIOLATION_JQ_DEFINITIONS}"' [.[] | select(is_autofix)]')
+escalate=$(printf '%s' "$all_violations" | jq -c "${VIOLATION_JQ_DEFINITIONS}"' [.[] | select(is_autofix | not)]')
 autofix_count=$(printf '%s' "$autofix" | jq 'length')
 escalate_count=$(printf '%s' "$escalate" | jq 'length')
 
