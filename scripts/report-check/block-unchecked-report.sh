@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 検査を通っていない報告が画面に出なかったままターンが終わらないよう、画面から隠した報告があるあいだ、報告の書き直しを求めて差し戻す。
+# 差し戻しの上限に達した、または検査コマンドが失敗したあとも隠した報告が画面に出ていなければ、保存した報告を警告つきでユーザーに出す。
 # 隠したのに差し戻さない状態を作らないため、隠す条件は hold-unchecked-report.sh と同じ判定 (should_hold_message) を使う。
-# Stop から呼ばれ、stdin の JSON を受け取る。差し戻しは decision=block の JSON で出力する。
+# Stop から呼ばれ、stdin の JSON を受け取る。差し戻しは decision=block の JSON で、保存した報告の表示は systemMessage の JSON で出力する。
 
 set -uo pipefail
 
@@ -14,6 +15,13 @@ emit_block() {
   printf '%s\n' "$prompt_id" >> "${READ_LOG_DIR}/${session_id}.blocks"
   jq -nc --arg reason "報告が検査を通っていないため、画面に出ていない。応答の全文を草稿のファイルに書き、${repo_dir}/scripts/report-check/check-report.sh に草稿のファイルを渡して実行する。違反が出たら草稿を直して通るまで繰り返し、通ったら草稿の全文をそのまま最終の応答として出す。" \
     '{decision: "block", reason: $reason}'
+}
+
+emit_held_report() {
+  local session_id="$1"
+  read_held_report "$session_id" | jq -nc --arg notice "$UNCHECKED_REPORT_NOTICE" --rawfile report /dev/stdin \
+    '{systemMessage: ($notice + "\n\n" + $report)}'
+  clear_held_prompt "$session_id"
 }
 
 main() {
@@ -33,8 +41,12 @@ main() {
     return 0
   fi
 
-  if is_prompt_held "$session_id" "$prompt_id" && has_blocks_remaining "$session_id" "$prompt_id"; then
+  is_prompt_held "$session_id" "$prompt_id" || return 0
+
+  if has_blocks_remaining "$session_id" "$prompt_id" && ! has_check_failure "$session_id" "$prompt_id"; then
     emit_block "$session_id" "$prompt_id"
+  else
+    emit_held_report "$session_id"
   fi
 }
 

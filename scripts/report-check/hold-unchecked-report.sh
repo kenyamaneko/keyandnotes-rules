@@ -36,13 +36,17 @@ main() {
   prompt_id=$(read_current_prompt_id "$session_id")
 
   if should_hold_message "$message" "$session_id" "$prompt_id"; then
-    record_held_prompt "$session_id" "$prompt_id"
+    record_held_prompt "$session_id" "$prompt_id" "$message"
     # Stop フックの差し戻し理由の表示は隠せず、隠せるのは報告の本文だけのため、報告だけを画面から隠す。
     printf '%s' "$HIDDEN_NOTICE" | emit_display
-  else
-    if is_report_message "$message"; then
-      clear_held_prompt "$session_id"
+  elif is_report_message "$message"; then
+    clear_held_prompt "$session_id"
+    if is_passed_message "$session_id" "$(hash_message "$message")"; then
+      emit_display < "$buffer_file"
+    else
+      { printf '%s\n\n' "$UNCHECKED_REPORT_NOTICE"; cat "$buffer_file"; } | emit_display
     fi
+  else
     emit_display < "$buffer_file"
   fi
   rm -f "$buffer_file"

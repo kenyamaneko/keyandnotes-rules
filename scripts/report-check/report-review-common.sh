@@ -6,6 +6,7 @@ readonly REPORT_HEADING='## 報告事項'
 readonly DECISION_HEADING='## 判断事項'
 readonly VERDICT_RESOLVABLE='ルールで解決できる'
 readonly REVIEWER_MODEL='sonnet'
+readonly UNCHECKED_REPORT_NOTICE='報告の検査を通せなかったため、検査を通っていない報告をそのまま表示する。'
 readonly MIN_QUOTE_LENGTH=10
 readonly FAILURE_OUTPUT_LENGTH=500
 readonly REVIEW_SCHEMA='{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"number":{"type":"integer"},"verdict":{"type":"string","enum":["ルールで解決できる","聞いてよい"]},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"chosen_option":{"type":"string"},"explanation":{"type":"string"}},"required":["number","verdict","basis_file","basis_quote","chosen_option","explanation"]}},"concise_issues":{"type":"array","items":{"type":"object","properties":{"sentence":{"type":"string"},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"problem":{"type":"string"}},"required":["sentence","basis_file","basis_quote","problem"]}}},"required":["items","concise_issues"]}'
@@ -71,12 +72,27 @@ is_passed_message() {
 readonly MAX_BLOCKS_PER_PROMPT=5
 
 # 報告を画面から隠す (MessageDisplay) と差し戻す (Stop) を同じ判定にし、隠したのに差し戻さない状態を作らないため、判定を一か所に置く。
-# 検査を通っていない (草稿の検査を通した報告と全文が一致しない) 報告で、同じユーザー入力への差し戻しが上限に達していなければ、隠して差し戻す。
+# 検査を通っていない (草稿の検査を通した報告と全文が一致しない) 報告で、同じユーザー入力で検査コマンドが失敗しておらず、差し戻しが上限に達していなければ、隠して差し戻す。
 should_hold_message() {
   local message="$1" session_id="$2" prompt_id="$3"
   is_report_message "$message" || return 1
   is_passed_message "$session_id" "$(hash_message "$message")" && return 1
+  has_check_failure "$session_id" "$prompt_id" && return 1
   has_blocks_remaining "$session_id" "$prompt_id"
+}
+
+# 検査コマンドが失敗すると報告を検査に通せず、隠し続けても画面に出せないため、報告を隠さず表示できるよう、同じユーザー入力で検査コマンドが失敗した事実を記録する。
+record_check_failure() {
+  local session_id="$1" prompt_id="$2"
+  mkdir -p "$READ_LOG_DIR"
+  printf '%s\n' "$prompt_id" >> "${READ_LOG_DIR}/${session_id}.check-failures"
+}
+
+# 同じユーザー入力で検査コマンドが失敗したかを返す。
+has_check_failure() {
+  local session_id="$1" prompt_id="$2"
+  [ -n "$prompt_id" ] || return 1
+  [ "$(count_lines_in_log "${READ_LOG_DIR}/${session_id}.check-failures" "$prompt_id")" -gt 0 ]
 }
 
 # 差し戻しの再試行が終わらず費用が増え続けるのを防ぐため、同じユーザー入力への差し戻しに上限を置く。
@@ -87,15 +103,22 @@ has_blocks_remaining() {
 
 # 画面に出す応答の最後が報告でなくても、同じユーザー入力で隠した報告が画面に出るまで Stop フックが差し戻せるよう、隠した事実を残す。
 record_held_prompt() {
-  local session_id="$1" prompt_id="$2"
+  local session_id="$1" prompt_id="$2" message="$3"
   mkdir -p "$READ_LOG_DIR"
   printf '%s\n' "$prompt_id" > "${READ_LOG_DIR}/${session_id}.held"
+  printf '%s' "$message" > "${READ_LOG_DIR}/${session_id}.held-report"
 }
 
-# 隠した報告が画面に出たため、隠した事実の記録を消す。
+# 隠した報告が画面に出たため、隠した事実と報告の全文の記録を消す。
 clear_held_prompt() {
   local session_id="$1"
-  rm -f "${READ_LOG_DIR}/${session_id}.held"
+  rm -f "${READ_LOG_DIR}/${session_id}.held" "${READ_LOG_DIR}/${session_id}.held-report"
+}
+
+# 隠した報告の全文を返す。
+read_held_report() {
+  local session_id="$1"
+  cat "${READ_LOG_DIR}/${session_id}.held-report"
 }
 
 # 同じユーザー入力で報告を隠した記録があるかを返す。
