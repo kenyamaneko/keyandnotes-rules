@@ -55,7 +55,7 @@ def clarity_label: if .clarity == "obvious" then "🟢明白" else "🟡解釈�
 def safety_label: if .fix_safety == "safe" then "🟢実害なし" else "🔴実害ありうる" end;
 def kind_label: if is_autofix then "自律修正" else "要確認" end;'
 readonly AUDIT_LOG_ENTRY_FORMAT="${VIOLATION_JQ_DEFINITIONS}"'
-{allow: "違反なし (allow)", deny: "自律修正してから再 commit (deny)", ask: "確認が必要 (ask)"} as $decision_labels
+{allow: "違反なし (allow)", allow_no_diff: "監査する差分なし (allow)", deny: "自律修正してから再 commit (deny)", ask: "確認が必要 (ask)"} as $decision_labels
 | sort_by(if is_autofix then 0 else 1 end) as $items
 | ($items | length) as $total
 | ($items | map(select(is_autofix)) | length) as $autofix_count
@@ -317,7 +317,11 @@ OVERLAY_RULES=""
 [ -n "$overlay_path" ] && [ "$overlay_path" != "$BASE_RULES" ] && OVERLAY_RULES="$overlay_path"
 
 staged_diff=$(git diff --cached -U"$DIFF_CONTEXT_LINES" --diff-filter=ACM -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
-[ -z "$staged_diff" ] && exit 0
+if [ -z "$staged_diff" ]; then
+  # 監査する差分が空の記録が無いと、監査が動かなかったのか差分が無かったのかをログから見分けられないため、差分が空でも記録する。
+  log_audit_entry "allow_no_diff" "$repo_name" '[]' || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
+  exit 0
+fi
 staged_names=$(git diff --cached --name-only --diff-filter=ACM -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
 staged_files=()
 while IFS= read -r file; do
@@ -365,7 +369,7 @@ audit_staged_files
 
 violations_count=$(printf '%s' "$all_violations" | jq 'length')
 if [ "$violations_count" -eq 0 ]; then
-  # 違反なしの記録が無いと、監査が動かなかったのか違反が 0 件だったのかをログから区別できないため、違反なしでも記録する。
+  # 違反なしの記録が無いと、監査が動かなかったのか違反が 0 件だったのかをログから見分けられないため、違反なしでも記録する。
   log_audit_entry "allow" "$repo_name" "$all_violations" || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
   exit 0
 fi
