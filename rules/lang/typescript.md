@@ -22,6 +22,7 @@
 ## [lang/typescript] テスト方針
 
 - テストランナーは Vitest を用いる (backend / frontend 共通)
+  - ただし、Detox で iOS シミュレータ上のアプリを操作するテストは、Detox が対応する Jest で実行する
 - GUI テストの原則は testing.md「GUI (画面) のテスト」に従い、次のツールで実装する
   - React コンポーネントは Testing Library (`@testing-library/react` + `@testing-library/user-event`) で操作する
   - API 通信のモックは MSW で HTTP 境界 (ネットワーク層) をモックする。api クライアント / モジュールを `vi.mock` 等で直接差し替えない
