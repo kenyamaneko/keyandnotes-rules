@@ -1,0 +1,10 @@
+.PHONY: test-unit test-component-integration test-infrastructure-integration
+
+test-unit:
+	{{単体テストを実行するコマンド}}
+
+test-component-integration:
+	{{部品間結合テストを実行するコマンド}}
+
+test-infrastructure-integration:
+	{{インフラ結合テストを実行するコマンド}}
