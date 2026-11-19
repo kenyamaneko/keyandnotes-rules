@@ -182,7 +182,8 @@ overlay は対応する base のルールを上書きする階層です。base �
 - fix_safety (是正の安全性):
   - "safe"    = 違反を修正しても設計上の実害がない (例: docstring 追加, What コメント削除)
   - "harmful" = 是正することで設計上の実害が生じうる (例: 公開 API のリネーム, 責務分割による境界変更)
-- diff だけでは確信が持てないときは "interpretive" / "harmful" (= 安全側) に倒す。自律修正は明白かつ安全な違反に限定するため
+- 文言の違反 (documentation.md の「整形」「語の選び方」「コード上の名前の書き方」「冗長の排除」「見出しの付け方」。テスト名を除く) は、表現を直すだけで設計に影響しないため、fix_safety は常に "safe"、clarity は規約の文面に当たるなら "obvious" にする。diff だけで確信が持てなくても "interpretive" に倒さない
+- 文言の違反以外で、diff だけでは確信が持てないときは "interpretive" / "harmful" (= 安全側) に倒す。自律修正は明白かつ安全な違反に限定するため
 
 # 適用ルール (target repo: ${repo_name})
 HEADER
