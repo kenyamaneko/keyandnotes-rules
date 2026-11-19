@@ -55,7 +55,7 @@ def clarity_label: if .clarity == "obvious" then "🟢明白" else "🟡解釈�
 def safety_label: if .fix_safety == "safe" then "🟢実害なし" else "🔴実害ありうる" end;
 def kind_label: if is_autofix then "自律修正" else "要確認" end;'
 readonly AUDIT_LOG_ENTRY_FORMAT="${VIOLATION_JQ_DEFINITIONS}"'
-{deny: "自律修正してから再 commit (deny)", ask: "確認が必要 (ask)"} as $decision_labels
+{allow: "違反なし (allow)", deny: "自律修正してから再 commit (deny)", ask: "確認が必要 (ask)"} as $decision_labels
 | sort_by(if is_autofix then 0 else 1 end) as $items
 | ($items | length) as $total
 | ($items | map(select(is_autofix)) | length) as $autofix_count
@@ -364,7 +364,11 @@ all_violations='[]'
 audit_staged_files
 
 violations_count=$(printf '%s' "$all_violations" | jq 'length')
-[ "$violations_count" -eq 0 ] && exit 0
+if [ "$violations_count" -eq 0 ]; then
+  # 違反なしの記録が無いと、監査が動かなかったのか違反が 0 件だったのかをログから区別できないため、違反なしでも記録する。
+  log_audit_entry "allow" "$repo_name" "$all_violations" || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
+  exit 0
+fi
 
 autofix=$(printf '%s' "$all_violations" | jq -c "${VIOLATION_JQ_DEFINITIONS}"' [.[] | select(is_autofix)]')
 escalate=$(printf '%s' "$all_violations" | jq -c "${VIOLATION_JQ_DEFINITIONS}"' [.[] | select(is_autofix | not)]')
