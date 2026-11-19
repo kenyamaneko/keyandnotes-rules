@@ -35,6 +35,9 @@
 
 - コスト削減のため、GitHub Actions のジョブには timeout-minutes と concurrency を設定する
   - timeout-minutes は runs-on を持つジョブに設定する。reusable workflow を呼ぶだけのジョブには設定できない
+- GitHub Actions のジョブの実行環境 (runs-on) は、原則として Ubicloud のランナーにする
+- iOS 向けのビルドとテストは、CI で実行せず、ローカルだけで実行する
+  - なぜ: 時間がかかり、コストが跳ね上がるため
 - コスト削減と CI パイプライン実行時間短縮のため push / pull_request トリガーの workflow は、ドキュメントのみの変更ではテスト・ビルドを実行しない。
   - required status check を使わない workflow の場合
     - paths-ignore を設定し、ドキュメント修正のみの PR をテストなしでマージできる
