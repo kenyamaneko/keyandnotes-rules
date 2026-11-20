@@ -395,11 +395,11 @@ if [ "$autofix_count" -gt 0 ]; then
   emit_decision "deny" "$reason"
 fi
 
+# 確認ダイアログは長い理由の後半を省略するため、行動・ログの場所・指摘ごとの 1 行の一覧を詳細より前に出す。
 reason=$(
-  printf 'Claude auditor が判断を要するルール違反 %d 件を検出。明白でない、または是正に設計上の実害がありうるため、修正可否を判断してください (全文: %s):\n\n' "$escalate_count" "$AUDIT_LOG_FILE"
+  printf '修正するなら拒否、意図的に commit するなら許可してください。\n全文: %s\n\n判断を要するルール違反 %d 件:\n' "$AUDIT_LOG_FILE" "$escalate_count"
   printf '%s' "$escalate" | format_violation_summary
-  printf '\n'
+  printf '\n\n'
   printf '%s' "$escalate" | format_violations
-  printf '\n\n修正するなら拒否、意図的に commit するなら許可してください。'
 )
 emit_decision "ask" "$reason"
