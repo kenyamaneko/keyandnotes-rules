@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Claude Code から実行された git commit が、コミット前の監査 (pre-commit-machine-audit.sh・pre-commit-claude-audit.sh) を通ったものかを確かめる。
+# 監査は Bash の素の git commit にしか反応しないため、スクリプトの中から呼ぶ git commit はここで止める。
+# 人間の手動のコミットは監査の対象外のため、Claude Code から実行されていないときは何もしない。
+
+set -uo pipefail
+
+COMMON_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../commit-audit" && pwd -P)/claude-audit-common.sh"
+readonly COMMON_LIB
+
+fail_closed() {
+  printf '⚠️  git pre-commit: %s 監査不能のため fail-safe でコミットブロック。\n' "$1" >&2
+  exit 1
+}
+
+[ "${CLAUDECODE:-}" = "1" ] || exit 0
+
+# shellcheck source=/dev/null
+source "$COMMON_LIB" || fail_closed "共有ロジック (${COMMON_LIB}) を読み込めない。"
+
+[ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポジトリの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
+repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
+kn_is_audit_target "$repos_config" "$(kn_repo_name "$PWD")" || exit 0
+
+kn_consume_audit_records
+consume_status=$?
+[ "$consume_status" -eq 0 ] && exit 0
+[ "$consume_status" -eq "$KN_AUDIT_RECORDS_UNREADABLE" ] && fail_closed 'ステージ内容の監査の記録を git から読めない。'
+
+printf '\n❌ git pre-commit: このコミットは、コミット前の監査を通っていません。ステージする Bash 呼び出しと、素の git commit を実行する Bash 呼び出しを分けて、コミットしてください。スクリプトや bash -c の中から呼んだ git commit は、監査が動きません。\n' >&2
+exit 1

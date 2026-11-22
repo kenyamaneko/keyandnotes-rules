@@ -264,6 +264,11 @@ format_violation_summary() {
   jq -r '.[] | "- \(.file):\(.line)  \(.rule)"'
 }
 
+# git の pre-commit フックがコミットを通す判定を確かめるため、ステージ内容を監査の記録に残す。
+record_pass() {
+  kn_record_audit_pass claude || fail_closed '監査の記録を書けない。'
+}
+
 emit_decision() {
   local decision="$1" reason="$2"
   log_audit_entry "$decision" "$repo_name" "$all_violations" || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
@@ -321,6 +326,7 @@ staged_diff=$(git diff --cached -U"$DIFF_CONTEXT_LINES" --diff-filter=ACM -- . "
 if [ -z "$staged_diff" ]; then
   # 監査する差分が空の記録が無いと、監査が動かなかったのか差分が無かったのかをログから見分けられないため、差分が空でも記録する。
   log_audit_entry "allow_no_diff" "$repo_name" '[]' || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
+  record_pass
   exit 0
 fi
 staged_names=$(git diff --cached --name-only --diff-filter=ACM -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
@@ -372,6 +378,7 @@ violations_count=$(printf '%s' "$all_violations" | jq 'length')
 if [ "$violations_count" -eq 0 ]; then
   # 違反なしの記録が無いと、監査が動かなかったのか違反が 0 件だったのかをログから見分けられないため、違反なしでも記録する。
   log_audit_entry "allow" "$repo_name" "$all_violations" || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
+  record_pass
   exit 0
 fi
 
@@ -402,4 +409,5 @@ reason=$(
   printf '\n\n'
   printf '%s' "$escalate" | format_violations
 )
+record_pass
 emit_decision "ask" "$reason"

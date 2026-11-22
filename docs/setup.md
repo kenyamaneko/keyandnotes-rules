@@ -2,7 +2,7 @@
 
 ## フックの登録
 
-次のコマンドで、このリポジトリのフックを `~/.claude/settings.json` に登録する。
+次のコマンドで、このリポジトリのフックを `~/.claude/settings.json` に登録し、すべてのリポジトリの git のフックの置き場を、このリポジトリの git 用のフックに設定する。
 
 ```sh
 make setup-hooks

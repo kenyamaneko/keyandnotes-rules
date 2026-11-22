@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # commit 前の監査フック (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh) から source される。
-# 複数のフックが同じ判断をするため、commit 先の解決と、principles.md の @import 一覧の導出をここに置く。
+# 複数のフックが同じ判断をするため、コミット先の解決・principles.md の @import 一覧の導出・監査を通した記録の読み書き (git の pre-commit フックも使う) をここに置く。
 
 KN_SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 readonly KN_SHARED_REPO_DIR
@@ -86,6 +86,46 @@ kn_load_repos_config() {
 kn_is_audit_target() {
   local repos_config="$1" repo_name="$2"
   [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos | has($name)')" = "true" ]
+}
+
+readonly KN_AUDIT_RECORD_DIR_NAME="kn-commit-audit"
+
+# 監査の確認ダイアログで許可を待つ間に記録が古くならないため、記録を有効とみなす時間 (分) を長めにする。
+readonly KN_AUDIT_RECORD_TTL_MINUTES=30
+
+readonly KN_AUDIT_NAMES=(machine claude)
+
+readonly KN_AUDIT_RECORDS_MISSING=1
+readonly KN_AUDIT_RECORDS_UNREADABLE=2
+
+kn_build_audit_record_path() {
+  local audit_name="$1" tree="$2" git_common_dir
+  git_common_dir=$(git rev-parse --path-format=absolute --git-common-dir) || return 1
+  printf '%s/%s/%s-%s' "$git_common_dir" "$KN_AUDIT_RECORD_DIR_NAME" "$audit_name" "$tree"
+}
+
+# 今ステージされている内容を、監査がコミットを通したと記録する。コミット先のリポジトリの中で呼ぶ。
+kn_record_audit_pass() {
+  local audit_name="$1" tree record_path
+  tree=$(git write-tree) || return 1
+  record_path=$(kn_build_audit_record_path "$audit_name" "$tree") || return 1
+  mkdir -p "$(dirname "$record_path")" || return 1
+  # コミットされなかった記録が溜まり続けるのを防ぐため、有効期限を過ぎた記録を消す。
+  find "$(dirname "$record_path")" -type f -mmin "+${KN_AUDIT_RECORD_TTL_MINUTES}" -delete || return 1
+  : > "$record_path"
+}
+
+# 今ステージされている内容について、すべての監査の記録が有効なら、記録を消費して 0 を返す。1 つでも欠けていれば、何も消費せず KN_AUDIT_RECORDS_MISSING を返す。git の操作に失敗したときは KN_AUDIT_RECORDS_UNREADABLE を返す。コミット先のリポジトリの中で呼ぶ。
+kn_consume_audit_records() {
+  local tree audit_name record_path
+  local record_paths=()
+  tree=$(git write-tree) || return "$KN_AUDIT_RECORDS_UNREADABLE"
+  for audit_name in "${KN_AUDIT_NAMES[@]}"; do
+    record_path=$(kn_build_audit_record_path "$audit_name" "$tree") || return "$KN_AUDIT_RECORDS_UNREADABLE"
+    [ -n "$(find "$record_path" -mmin "-${KN_AUDIT_RECORD_TTL_MINUTES}" 2>/dev/null)" ] || return "$KN_AUDIT_RECORDS_MISSING"
+    record_paths+=("$record_path")
+  done
+  rm -f "${record_paths[@]}"
 }
 
 # principles.md が @import する参照先を1行1件で返す。
