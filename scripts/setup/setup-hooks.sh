@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# このリポジトリのフックを Claude Code の設定ファイル (既定は ~/.claude/settings.json) に登録する。
+# このリポジトリのフックを Claude Code の設定ファイル (既定は ~/.claude/settings.json) に登録し、git のフックの置き場を設定する。
 
 set -euo pipefail
 
@@ -39,3 +39,7 @@ registered=$(jq \
 
 printf '%s\n' "$registered" > "$settings_file"
 printf 'フックを登録した: %s\n' "$settings_file"
+
+# どのリポジトリの git commit にも、コミット前の監査を通ったかの確認を効かせるため、git のフックの置き場を全リポジトリ共通で指定する。
+git config --global core.hooksPath "${scripts_dir}/git-hooks"
+printf 'git のフックの置き場を登録した: %s\n' "${scripts_dir}/git-hooks"

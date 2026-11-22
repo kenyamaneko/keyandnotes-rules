@@ -5,6 +5,7 @@
 # - HARD 違反あり  → exit 2。stderr を worker に返して commit をブロックする
 # - SOFT 違反のみ  → permissionDecision=ask を stdout に返し、user に許否を委ねる
 # - 違反なし / 対象外 → exit 0
+# - 違反なし / SOFT 違反のみ (コミットを通す判定) → ステージ内容を監査の記録に残す。git の pre-commit フックが、この記録のないコミットを止める
 # - 監査不能 (入力欠落 / JSON parse 失敗) → exit 2 で fail-closed
 
 set -uo pipefail
@@ -16,6 +17,10 @@ readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/commit-audit/claude-audit-common
 fail_closed() {
   printf '⚠️  pre-commit-machine-audit: %s 監査不能のため fail-safe で commit ブロック。\n' "$1" >&2
   exit 2
+}
+
+record_pass() {
+  kn_record_audit_pass machine || fail_closed '監査の記録を書けない。'
 }
 
 # shellcheck source=/dev/null
@@ -37,7 +42,10 @@ repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos
 kn_is_audit_target "$repos_config" "$(kn_repo_name "$target_cwd")" || exit 0
 
 staged=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
-[ -z "$staged" ] && exit 0
+if [ -z "$staged" ]; then
+  record_pass
+  exit 0
+fi
 
 hard_violations=()
 soft_violations=()
@@ -125,7 +133,10 @@ done <<< "$added_workflows"
 hard_n=${#hard_violations[@]}
 soft_n=${#soft_violations[@]}
 
-[ "$hard_n" -eq 0 ] && [ "$soft_n" -eq 0 ] && exit 0
+if [ "$hard_n" -eq 0 ] && [ "$soft_n" -eq 0 ]; then
+  record_pass
+  exit 0
+fi
 
 # HARD があれば block する (SOFT も併せて表示)。
 if [ "$hard_n" -gt 0 ]; then
@@ -146,7 +157,8 @@ if [ "$hard_n" -gt 0 ]; then
   exit 2
 fi
 
-# SOFT のみなら ask で user に判断を委ねる。
+# SOFT のみなら ask でユーザーに判断を委ねる。許可されるとコミットが走るため、記録を先に残す。
+record_pass
 reason=$(
   printf '機械検出した SOFT 違反 %d 件:\n' "$soft_n"
   for v in "${soft_violations[@]}"; do
