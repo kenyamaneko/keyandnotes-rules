@@ -26,6 +26,8 @@
 - GUI テストの原則は testing.md「GUI (画面) のテスト」に従い、次のツールで実装する
   - React コンポーネントは Testing Library (`@testing-library/react` + `@testing-library/user-event`) で操作する
   - API 通信のモックは MSW で HTTP 境界 (ネットワーク層) をモックする。api クライアント / モジュールを `vi.mock` 等で直接差し替えない
+  - Web アプリのレイアウトの確認は、Playwright で行う
+  - ネイティブアプリのレイアウトの確認は、Detox で行う。端末の文字サイズの設定の変更は、`xcrun simctl` で行う
 - テストの命名は testing.md「テストの命名」を次のとおり割り当てる
   - `[区分:大機能(:中機能)]小機能` = 最も外側の `describe` (例: `describe("[本体:注文:業務ルール]送料計算")`)
   - ケース = 項目を引数に取る補助関数 (`defineCase`) の呼び出し。補助関数がテスト名を組み立て、項目を Vitest の注釈 (`annotate`) として結果に載せる。Playwright の E2E では、`annotations` に積む。必須の項目は型で必須にする
