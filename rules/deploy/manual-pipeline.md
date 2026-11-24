@@ -1,6 +1,6 @@
 > NOTE: このファイルは原則として人間が運用する。例外的に許可があった場合のみClaude Codeが修正しても良い。
 
-# Deployment Strategy (Manual Pipeline)
+# デプロイ戦略 (Manual Pipeline)
 
 各環境への反映を、パイプラインの手動実行で行う戦略。
 

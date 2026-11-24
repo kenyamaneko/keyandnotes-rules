@@ -1,6 +1,6 @@
 > NOTE: このファイルは原則として人間が運用する。例外的に許可があった場合のみClaude Codeが修正しても良い。
 
-# Deployment Strategy (Store Release)
+# デプロイ戦略 (Store Release)
 
 検証用の配布チャネルと本番ストア配布を持ち、ストア審査を本番ゲートにする戦略。
 

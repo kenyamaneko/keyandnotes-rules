@@ -1,6 +1,6 @@
 > NOTE: このファイルは原則として人間が運用する。例外的に許可があった場合のみClaude Codeが修正しても良い。
 
-# Deployment Strategy (Artifact Publish)
+# デプロイ戦略 (Artifact Publish)
 
 成果物をレジストリへ公開する戦略。反映先は稼働環境ではなくレジストリで、consumer が取り込むまで反映されない。
 

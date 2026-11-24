@@ -1,6 +1,6 @@
 > NOTE: このファイルは原則として人間が運用する。例外的に許可があった場合のみClaude Codeが修正しても良い。
 
-# Deployment Strategy (GitOps Sync)
+# デプロイ戦略 (GitOps Sync)
 
 dev / stg / prod の3環境を持ち、GitOps エージェント (ArgoCD 等) の sync で反映する戦略。
 

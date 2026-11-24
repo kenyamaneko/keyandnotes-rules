@@ -1,6 +1,6 @@
 > NOTE: このファイルは原則として人間が運用する。例外的に許可があった場合のみClaude Codeが修正しても良い。
 
-# Deployment Strategy (Merge → Dev, Tag → Stg, Promote → Prod)
+# デプロイ戦略 (Merge → Dev, Tag → Stg, Promote → Prod)
 
 dev / stg / prod の3環境を持ち、マージで dev、タグで stg へ自動デプロイし、prod へは検証済みのタグを人が昇格させる戦略。
 
