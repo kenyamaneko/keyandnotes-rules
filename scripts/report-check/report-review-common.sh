@@ -44,11 +44,13 @@ has_html_location_in_request() {
   printf '%s\n' "$message" | extract_section "$REQUEST_HEADING" | grep -qE -- "$HTML_LOCATION_PATTERN"
 }
 
-# 報告ではない応答に無関係な指摘を出さないため、報告か判断事項の項目を含む応答だけを検査の対象にする。
+# 雛形で書かれていない応答が検査をすり抜けるのを防ぐため、雛形の三つの見出しのいずれかか判断事項の項目を含む応答を報告として扱う。
 is_report_message() {
-  local message="$1" section
+  local message="$1" section heading
   section=$(printf '%s\n' "$message" | extract_decision_section)
-  printf '%s\n' "$message" | grep -qxF -- "$REPORT_HEADING" && return 0
+  for heading in "$REPORT_HEADING" "$DECISION_HEADING" "$REQUEST_HEADING"; do
+    printf '%s\n' "$message" | grep -qxF -- "$heading" && return 0
+  done
   printf '%s\n' "$section" | grep -qE '^[0-9]+\. '
 }
 

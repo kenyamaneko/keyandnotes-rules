@@ -43,7 +43,7 @@ main() {
   message=$(cat "$draft_file")
 
   if ! is_report_message "$message"; then
-    printf '草稿に「%s」の見出しも判断事項の項目も無い。報告を含む応答の全文を草稿に書く。\n' "$REPORT_HEADING" >&2
+    printf '草稿に「%s」「%s」「%s」のいずれの見出しも無い。報告の雛形で書いた応答の全文を草稿に書く。\n' "$REPORT_HEADING" "$DECISION_HEADING" "$REQUEST_HEADING" >&2
     return "$STATUS_FAILURE"
   fi
 
