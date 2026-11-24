@@ -205,8 +205,10 @@ HEADER
 # 1 グループ分の diff を auditor にかけ、違反を all_violations に集約する。
 audit_diff() {
   local out exit_code err_msg violations_type
+  # 親のフックが監査の出力を報告の雛形でないとして差し戻すのを防ぐため、フックを切る。
   out=$(build_prompt "$1" | claude -p \
     --model "$AUDITOR_MODEL" \
+    --settings '{"disableAllHooks": true}' \
     --tools "" \
     --output-format json \
     --json-schema "$AUDIT_SCHEMA" \
