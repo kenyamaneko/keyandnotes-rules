@@ -1,6 +1,6 @@
 > NOTE: このファイルは原則として人間が運用する。例外的に許可があった場合のみClaude Codeが修正しても良い。
 
-# Deployment Strategy (Merge → Prod)
+# デプロイ戦略 (Merge → Prod)
 
 本番環境のみを持ち、main マージで即本番へデプロイする、ゲートを挟まない戦略。
 

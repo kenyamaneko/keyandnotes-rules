@@ -1,6 +1,6 @@
 > NOTE: このファイルは原則として人間が運用する。例外的に許可があった場合のみClaude Codeが修正しても良い。
 
-# Deployment Strategy (Merge → Dev, Tag → Prod)
+# デプロイ戦略 (Merge → Dev, Tag → Prod)
 
 dev と prod の2環境を持ち、マージで dev、リリースのワークフローの実行で prod へ自動デプロイする戦略。
 
