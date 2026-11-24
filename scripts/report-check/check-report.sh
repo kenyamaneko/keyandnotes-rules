@@ -6,7 +6,7 @@
 
 set -uo pipefail
 
-readonly MAX_CHECKS_PER_PROMPT=10
+readonly MAX_CHECKS_PER_PROMPT=5
 readonly STATUS_VIOLATION=1
 readonly STATUS_FAILURE=2
 
