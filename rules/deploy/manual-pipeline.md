@@ -32,3 +32,4 @@
 
 - IaC (Terraform 等)。state が SSoT でタグ運用しないもの
 - 本番反映を常に人の手動操作に固定したいもの (サーバレス関数 / ジョブの手動 dispatch デプロイ等)
+- 環境が一つで、運用者が一人なら Manual Local Apply を検討する
