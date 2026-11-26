@@ -88,10 +88,17 @@ kn_is_audit_target() {
   [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos | has($name)')" = "true" ]
 }
 
-# ステージされた、追加・変更・名前の変更があるファイルの名前を、1 行に 1 つ返す。引数は、対象を絞るパスの指定。
+# 監査の対象にする変更の種類。追加・コピー・変更・名前の変更を表す git の文字を並べる。
+readonly KN_AUDITED_CHANGE_TYPES=ACMR
+# 追加したファイルだけを表す git の文字。
+readonly KN_ADDED_CHANGE_TYPE=A
+
+# ステージされたファイルのうち、指定した種類の変更があるものの名前を、1 行に 1 つ返す。引数は、変更の種類を表す git の文字と、対象を絞るパスの指定。
 kn_list_staged_files() {
+  local change_types="$1"
+  shift
   # 日本語のファイル名が引用符で囲んだ表記になると中身の差分を取れないため、-z で受ける。
-  git diff --cached -M --name-only -z --diff-filter=ACMR -- "$@" | tr '\0' '\n'
+  git diff --cached -M --name-only -z --diff-filter="$change_types" -- "$@" | tr '\0' '\n'
 }
 
 # 指定したファイルのステージ内容の差分を返す。引数は、変更の前後に含める行数と、1 つ以上のファイル名。
@@ -105,7 +112,7 @@ kn_diff_staged_files() {
       [ "$file" = "$new_name" ] && paths+=("$old_name")
     done
   done < <(git diff --cached -M --name-status -z --diff-filter=R)
-  git diff --cached -M -U"$context_lines" --diff-filter=ACMR -- "${paths[@]}"
+  git diff --cached -M -U"$context_lines" --diff-filter="$KN_AUDITED_CHANGE_TYPES" -- "${paths[@]}"
 }
 
 readonly KN_AUDIT_RECORD_DIR_NAME="kn-commit-audit"
