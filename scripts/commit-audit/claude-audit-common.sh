@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # commit 前の監査フック (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh) から source される。
-# 複数のフックが同じ判断をするため、コミット先の解決・principles.md の @import 一覧の導出・監査を通した記録の読み書き (git の pre-commit フックも使う) をここに置く。
+# 複数のフックが同じ判断をするため、コミット先の解決・principles.md の @import 一覧の導出・ステージ内容の読み取り・監査を通した記録の読み書き (git の pre-commit フックも使う) をここに置く。
 
 KN_SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 readonly KN_SHARED_REPO_DIR
@@ -86,6 +86,26 @@ kn_load_repos_config() {
 kn_is_audit_target() {
   local repos_config="$1" repo_name="$2"
   [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos | has($name)')" = "true" ]
+}
+
+# ステージされた、追加・変更・名前の変更があるファイルの名前を、1 行に 1 つ返す。引数は、対象を絞るパスの指定。
+kn_list_staged_files() {
+  # 日本語のファイル名が引用符で囲んだ表記になると中身の差分を取れないため、-z で受ける。
+  git diff --cached -M --name-only -z --diff-filter=ACMR -- "$@" | tr '\0' '\n'
+}
+
+# 指定したファイルのステージ内容の差分を返す。引数は、変更の前後に含める行数と、1 つ以上のファイル名。
+kn_diff_staged_files() {
+  local context_lines="$1" old_name new_name file
+  shift
+  local paths=("$@")
+  # 名前を変えたファイルは、前の名前も指定しないと全体が追加した行になるため、前の名前を加える。
+  while IFS= read -r -d '' _ && IFS= read -r -d '' old_name && IFS= read -r -d '' new_name; do
+    for file in "$@"; do
+      [ "$file" = "$new_name" ] && paths+=("$old_name")
+    done
+  done < <(git diff --cached -M --name-status -z --diff-filter=R)
+  git diff --cached -M -U"$context_lines" --diff-filter=ACMR -- "${paths[@]}"
 }
 
 readonly KN_AUDIT_RECORD_DIR_NAME="kn-commit-audit"

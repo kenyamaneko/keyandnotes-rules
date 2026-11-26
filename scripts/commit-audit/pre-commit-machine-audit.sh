@@ -41,7 +41,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
 kn_is_audit_target "$repos_config" "$(kn_repo_name "$target_cwd")" || exit 0
 
-staged=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
+staged=$(kn_list_staged_files 2>/dev/null)
 if [ -z "$staged" ]; then
   record_pass
   exit 0
@@ -59,7 +59,7 @@ while IFS= read -r f; do
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     hard_violations+=("$f: $line  [ADR・BDR の番号をコメントに書かない — coding.md]")
-  done < <(git diff --cached -U0 -- "$f" 2>/dev/null | grep -nE '^\+.*\b(ADR|BDR)-[0-9]+\b' || true)
+  done < <(kn_diff_staged_files 0 "$f" 2>/dev/null | grep -nE '^\+.*\b(ADR|BDR)-[0-9]+\b' || true)
 done <<< "$staged"
 
 # --- (2/SOFT) CLAUDE.md の編集 (principles.md 禁止事項) ---
@@ -88,7 +88,7 @@ done <<< "$staged"
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   case "$f" in *.tf) ;; *) continue ;; esac
-  hits=$(git diff --cached -U20 -- "$f" 2>/dev/null | awk '
+  hits=$(kn_diff_staged_files 20 "$f" 2>/dev/null | awk '
     BEGIN { in_var = 0; depth = 0 }
     /^@@/ { in_var = 0; depth = 0; next }
     /^[+ ]variable[[:space:]]+"/ { in_var = 1; depth = 0 }
@@ -110,12 +110,12 @@ while IFS= read -r f; do
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     hard_violations+=("$f: $line  [Google Cloud を GCP と書かない — documentation.md]")
-  done < <(git diff --cached -U0 -- "$f" 2>/dev/null | grep -nE '^\+.*\bGCP\b' | grep -v 'GCPRO\|GCP_' || true)
+  done < <(kn_diff_staged_files 0 "$f" 2>/dev/null | grep -nE '^\+.*\bGCP\b' | grep -v 'GCPRO\|GCP_' || true)
 done <<< "$staged"
 
 # --- (6/HARD) 新規 workflow に timeout-minutes と concurrency を設定する (cicd.md CI方針) ---
 # 各ステップへの name 付与は構造解析が要り、paths-ignore の要否は required status check の使用で分かれるため、意味解釈側 (pre-commit-claude-audit.sh) に委ねる。
-added_workflows=$(git diff --cached --name-only --diff-filter=A 2>/dev/null | grep -E '\.github/workflows/.+\.ya?ml$' || true)
+added_workflows=$(git diff --cached --name-only -z --diff-filter=A 2>/dev/null | tr '\0' '\n' | grep -E '\.github/workflows/.+\.ya?ml$' || true)
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   content=$(git show ":$f" 2>/dev/null || cat "$f" 2>/dev/null || true)
