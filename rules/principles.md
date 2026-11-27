@@ -31,6 +31,10 @@
 
 ドキュメント (ADR・設計文書・README 等) と docs コメントの書き方は @documentation.md に従う。
 
+## [base] 表記の対応表
+
+避ける表記と使う表記は @notation-table.md に従う。
+
 ## [base] 実装フロー
 
 - 開発は GitHub Issue を起点に行う
