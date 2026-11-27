@@ -214,11 +214,31 @@ HEADER
 }
 
 build_re_audit_prompt() {
-  local delta="$1" assigned_files="$2"
+  local delta="$1" assigned_files="$2" changed_lines="$3"
   printf '前回の審査のあとに、staged の内容が変わりました。同じルールとレビュー方針で、あなたの担当ファイルについて、次の違反を violations に返してください。line には今の内容の行番号を入れてください。\n- 前回までに指摘した違反のうち、今の内容に残っているもの\n- 下の diff で新しく生じた違反\n'
   printf '\n今の内容のファイルは %s の下に展開し直しました。「無い」「書かれていない」という違反は、前回までに指摘したものも含め、返す前にここで記述を探してください。\n' "$staged_files_dir"
+  printf '返す違反は、直前のコミットから変わった内容が原因のものに限ります。下の diff の追加した行のうち、直前のコミットから変わっていない行は、直前のコミットの内容に戻した行です。\n'
   printf '\n# 担当ファイル\n%s\n' "$assigned_files"
+  printf '\n# 直前のコミットから変わっている箇所 (今の内容の行番号)\n%s\n' "$changed_lines"
   printf '\n# 前回審査した内容から今の内容への変更\n\n```diff\n%s\n```\n\n# 出力\n指定スキーマの JSON のみを返してください。\n' "$delta"
+}
+
+# ファイルごとに、直前のコミットから変わっている箇所を 1 行で返す。引数は、改行で区切ったファイル名。
+list_lines_changed_from_head() {
+  local file file_diff ranges
+  while IFS= read -r file; do
+    file_diff=$(kn_diff_staged_files 0 "$file" 2>"$err_file") || return 1
+    ranges=$(printf '%s\n' "$file_diff" | awk '
+      /^@@ / {
+        count = split(substr($3, 2), range, ",") == 2 ? range[2] : 1
+        if (count == 0) text = range[1] " 行目の直後 (削除)"
+        else if (count == 1) text = range[1] " 行目"
+        else text = range[1] "–" (range[1] + count - 1) " 行目"
+        printf "%s%s", separator, text
+        separator = "、"
+      }') || return 1
+    printf -- '- %s: %s\n' "$file" "${ranges:-無し}"
+  done <<< "$1"
 }
 
 # プロンプトを監査の Claude に渡し、会話の ID と違反を受け取る。会話の ID を渡すと、その会話を続ける。
@@ -292,7 +312,7 @@ audit_unassigned_files() {
 
 # 前回の審査のあとの変更を、前に審査した監査の Claude に審査させる。
 re_audit_changes() {
-  local previous_tree="$1" changed_names changed_names_json delta delta_bytes indexes index auditor total_bytes
+  local previous_tree="$1" changed_names changed_names_json delta delta_bytes indexes index auditor total_bytes assigned_files changed_lines
   local restart_hint="最初から審査し直すときは、${state_file} を削除してください。"
   # 名前を変える前のファイルを担当する監査の Claude も選ぶため、名前の変更を削除と追加に分けて一覧にする。
   changed_names=$(git diff --name-only -z --no-renames "$previous_tree" "$staged_tree" -- . "${EXCLUDED_PATHSPECS[@]}" 2>"$err_file" | tr '\0' '\n') \
@@ -318,7 +338,10 @@ re_audit_changes() {
     # 続ける会話には前回までに渡した差分が残るため、合計が監査予算に収まるかを確かめる。
     total_bytes=$(( $(printf '%s' "$auditor" | jq -r '.diff_bytes') + delta_bytes ))
     [ "$total_bytes" -gt "$diff_budget" ] && fail_closed "auditor の会話に渡す diff の合計が監査予算を超過 (${total_bytes} bytes > ${diff_budget})。${restart_hint}"
-    run_auditor "$(build_re_audit_prompt "$delta" "$(printf '%s' "$auditor" | jq -r '.files[]')")" "$(printf '%s' "$auditor" | jq -r '.session_id')"
+    assigned_files=$(printf '%s' "$auditor" | jq -r '.files[]')
+    changed_lines=$(list_lines_changed_from_head "$assigned_files") \
+      || fail_closed "直前のコミットから変わっている箇所を取れない。$(head -n "$ERROR_OUTPUT_MAX_LINES" "$err_file" 2>/dev/null) ${restart_hint}"
+    run_auditor "$(build_re_audit_prompt "$delta" "$assigned_files" "$changed_lines")" "$(printf '%s' "$auditor" | jq -r '.session_id')"
     auditors=$(printf '%s' "$auditors" | jq -c --argjson index "$index" --argjson result "$auditor_result" --argjson total_bytes "$total_bytes" \
       '.[$index] += $result + {diff_bytes: $total_bytes}')
   done
