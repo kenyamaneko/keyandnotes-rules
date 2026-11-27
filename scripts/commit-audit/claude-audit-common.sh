@@ -113,6 +113,19 @@ kn_diff_staged_files() {
   git diff --cached -M -U"$context_lines" --diff-filter="$KN_AUDITED_CHANGE_TYPES" -- "${paths[@]}"
 }
 
+# 今ステージされている内容のツリーを作り、その ID を返す。コミット先のリポジトリの中で呼ぶ。
+kn_write_staged_tree() (
+  index_path=$(git rev-parse --path-format=absolute --git-path index) || exit 1
+  copy_dir=$(mktemp -d) || exit 1
+  trap 'rm -rf "$copy_dir"' EXIT
+  # インデックスのファイルが無いリポジトリでも空のツリーを作れるようにするため、ファイルがあるときだけ複製する。
+  if [ -e "$index_path" ]; then
+    cp "$index_path" "${copy_dir}/index" || exit 1
+  fi
+  # 同時に動く監査がインデックスのロックを取り合わないようにするため、インデックスの複製からツリーを作る。
+  GIT_INDEX_FILE="${copy_dir}/index" git write-tree
+)
+
 readonly KN_AUDIT_RECORD_DIR_NAME="kn-commit-audit"
 
 # 監査の確認ダイアログで許可を待つ間に記録が古くならないため、記録を有効とみなす時間 (分) を長めにする。
@@ -132,7 +145,7 @@ kn_build_audit_record_path() {
 # 今ステージされている内容を、監査がコミットを通したと記録する。コミット先のリポジトリの中で呼ぶ。
 kn_record_audit_pass() {
   local audit_name="$1" tree record_path
-  tree=$(git write-tree) || return 1
+  tree=$(kn_write_staged_tree) || return 1
   record_path=$(kn_build_audit_record_path "$audit_name" "$tree") || return 1
   mkdir -p "$(dirname "$record_path")" || return 1
   # コミットされなかった記録が溜まり続けるのを防ぐため、有効期限を過ぎた記録を消す。
@@ -144,7 +157,7 @@ kn_record_audit_pass() {
 kn_consume_audit_records() {
   local tree audit_name record_path
   local record_paths=()
-  tree=$(git write-tree) || return "$KN_AUDIT_RECORDS_UNREADABLE"
+  tree=$(kn_write_staged_tree) || return "$KN_AUDIT_RECORDS_UNREADABLE"
   for audit_name in "${KN_AUDIT_NAMES[@]}"; do
     record_path=$(kn_build_audit_record_path "$audit_name" "$tree") || return "$KN_AUDIT_RECORDS_UNREADABLE"
     [ -n "$(find "$record_path" -mmin "-${KN_AUDIT_RECORD_TTL_MINUTES}" 2>/dev/null)" ] || return "$KN_AUDIT_RECORDS_MISSING"
