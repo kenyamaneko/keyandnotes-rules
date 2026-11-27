@@ -296,7 +296,7 @@ collect_issue_reasons() {
 # 呼び出し側が違反と検査の失敗を見分けられるよう、違反の指摘は標準出力に出し、検査の失敗は標準エラー出力に出して 2 を返す。
 review_message() {
   local message="$1" session_id="$2" prompt_id="$3" html="${4:-}"
-  local reasons="" unread_files reviewer_output reviewer_status review_json
+  local reasons="" unread_files reviewer_output reviewer_status review_json responded_reviewer_id
 
   if has_decision_items "$message"; then
     unread_files=$(list_unread_rule_files "$session_id" "$prompt_id")
@@ -319,13 +319,14 @@ ${unread_files}
   reviewer_output=$(run_reviewer "$reviewer_prompt" "$reviewer_id" 2>&1)
   reviewer_status=$?
   review_json=$(printf '%s' "$reviewer_output" | jq -c '.structured_output' 2>/dev/null)
+  responded_reviewer_id=$(printf '%s' "$reviewer_output" | jq -r '.session_id | strings' 2>/dev/null)
 
-  if [ "$reviewer_status" -ne 0 ] || [ -z "$review_json" ] || [ "$review_json" = "null" ]; then
+  if [ "$reviewer_status" -ne 0 ] || [ -z "$review_json" ] || [ "$review_json" = "null" ] || [ -z "$responded_reviewer_id" ]; then
     printf '報告の検査 (別プロセスの Claude) が失敗した。報告の依頼事項に、検査フック (report-review-common.sh) の修正を書く。失敗の出力: %s\n' \
       "$(printf '%s' "$reviewer_output" | head -c "$FAILURE_OUTPUT_LENGTH")" >&2
     return 2
   fi
-  record_reviewer_id "$session_id" "$prompt_id" "$(printf '%s' "$reviewer_output" | jq -r '.session_id')"
+  record_reviewer_id "$session_id" "$prompt_id" "$responded_reviewer_id"
 
   local decision_reasons concise_reasons document_reasons quotable_text
   quotable_text="${message}"$'\n'"${html}"
