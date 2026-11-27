@@ -439,7 +439,7 @@ mkdir -p "$AUDITOR_WORK_DIR" || fail_closed "auditor の作業ディレクトリ
 state_file="$(git rev-parse --path-format=absolute --git-dir)/${AUDITOR_STATE_FILE_NAME}" || fail_closed 'commit 先の git ディレクトリを求められない。'
 # コミットが 1 つも無いリポジトリも審査できるようにするため、HEAD が無いときは空文字として扱う。
 head_commit=$(git rev-parse --verify --quiet HEAD)
-staged_tree=$(git write-tree) || fail_closed 'ステージ内容の tree を作れない。'
+staged_tree=$(kn_write_staged_tree) || fail_closed 'ステージ内容のツリーを作れない。'
 
 auditors='[]'
 if [ -f "$state_file" ]; then
