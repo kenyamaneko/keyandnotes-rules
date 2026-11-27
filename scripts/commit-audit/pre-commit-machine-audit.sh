@@ -36,10 +36,11 @@ kn_is_commit_command "$exec_cmd" || exit 0
 target_cwd=$(kn_resolve_commit_dir "$cmd" "$input")
 cd "$target_cwd" 2>/dev/null || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+kn_move_to_repo_toplevel 2>/dev/null || fail_closed "commit 先 (${target_cwd}) のリポジトリのルートに移動できない。"
 
 [ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポジトリの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
 repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
-kn_is_audit_target "$repos_config" "$(kn_repo_name "$target_cwd")" || exit 0
+kn_is_audit_target "$repos_config" "$(kn_repo_name "$PWD")" || exit 0
 
 staged=$(kn_list_staged_files "$KN_AUDITED_CHANGE_TYPES" 2>/dev/null)
 if [ -z "$staged" ]; then

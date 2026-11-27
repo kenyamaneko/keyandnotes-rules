@@ -326,11 +326,10 @@ re_audit_changes() {
 
 # 監査の Claude が記述を探せるように、ステージ内容のツリーのファイルを展開する。
 export_staged_files() {
-  local repo_toplevel index_file="${export_dir}/index"
-  repo_toplevel=$(git rev-parse --show-toplevel 2>"$err_file") || return 1
+  local index_file="${export_dir}/index"
   GIT_INDEX_FILE="$index_file" git read-tree "$staged_tree" 2>"$err_file" || return 1
   mkdir -p "$staged_files_dir" 2>"$err_file" || return 1
-  GIT_INDEX_FILE="$index_file" git -C "$repo_toplevel" checkout-index --all --prefix="${staged_files_dir}/" 2>"$err_file"
+  GIT_INDEX_FILE="$index_file" git checkout-index --all --prefix="${staged_files_dir}/" 2>"$err_file"
 }
 
 save_auditor_state() {
@@ -376,10 +375,11 @@ staging_message=$(kn_find_staging_with_commit "$exec_cmd") && reject_command "$s
 commit_dir=$(kn_resolve_commit_dir "$cmd" "$input")
 cd "$commit_dir" 2>/dev/null || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+kn_move_to_repo_toplevel 2>"$err_file" || fail_closed "commit 先 (${commit_dir}) のリポジトリのルートに移動できない。"
 
-repo_name=$(kn_repo_name "$commit_dir")
+repo_name=$(kn_repo_name "$PWD")
 # 子リポジトリは本体のチェックアウトの隣にある別リポジトリの overlay と前提ドキュメントを参照するため、worktree でなく本体のチェックアウトを基準にする。
-expected_repo_root=$(kn_main_checkout_root "$commit_dir") || fail_closed "commit 先 (${commit_dir}) の本体のチェックアウトを求められない。"
+expected_repo_root=$(kn_main_checkout_root "$PWD") || fail_closed "commit 先 (${commit_dir}) の本体のチェックアウトを求められない。"
 
 [ -f "$REPOS_CONFIG_FILE" ] || fail_closed "全リポジトリの設定 (${REPOS_CONFIG_FILE}) が見つからない。"
 repos_config=$(kn_load_repos_config "$REPOS_CONFIG_FILE") || fail_closed "$repos_config"
