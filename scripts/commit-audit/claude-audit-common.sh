@@ -88,9 +88,7 @@ kn_is_audit_target() {
   [ "$(printf '%s' "$repos_config" | jq -r --arg name "$repo_name" '.repos | has($name)')" = "true" ]
 }
 
-# 監査の対象にする変更の種類。追加・コピー・変更・名前の変更を表す git の文字を並べる。
 readonly KN_AUDITED_CHANGE_TYPES=ACMR
-# 追加したファイルだけを表す git の文字。
 readonly KN_ADDED_CHANGE_TYPE=A
 
 # ステージされたファイルのうち、指定した種類の変更があるものの名前を、1 行に 1 つ返す。引数は、変更の種類を表す git の文字と、対象を絞るパスの指定。

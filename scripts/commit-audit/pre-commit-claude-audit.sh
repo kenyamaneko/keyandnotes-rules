@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# staged diff を別プロセスの Claude に共通ルールと commit 先リポジトリのルールで審査させ、違反があれば commit を止める。全リポジトリの設定を audit-repos.yaml に集約し、commit 先のリポジトリは commit するディレクトリから求める。
+# ステージした差分を別プロセスの Claude に共通ルールとコミット先リポジトリのルールで審査させ、違反があればコミットを止める。全リポジトリの設定を audit-repos.yaml に集約し、コミット先のリポジトリはコミットするディレクトリから求める。コミットが作られるまでの再審査は、前に審査した Claude の会話を続け、前回からの変更を審査させる。
 
 set -uo pipefail
 
@@ -30,6 +30,13 @@ readonly MAX_PROMPT_BYTES=350000
 
 # これを下回るとチャンク分割しても監査が成立しないため、監査不能にする。
 readonly MIN_DIFF_BUDGET_BYTES=20000
+
+# 残る監査の Claude の会話がコミット先のリポジトリの会話の一覧に混ざらないようにするため、監査の Claude は専用の作業ディレクトリで動かす。
+readonly AUDITOR_WORK_DIR="${HOME}/.claude/kn-commit-audit-sessions"
+readonly AUDITOR_STATE_FILE_NAME="kn-commit-auditors.json"
+
+readonly ERROR_OUTPUT_MAX_LINES=20
+readonly AUDITOR_RESULT_MAX_BYTES=500
 
 SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 readonly SHARED_REPO_DIR
@@ -202,49 +209,69 @@ HEADER
   printf '\n\n# 対象 staged diff\n\n```diff\n%s\n```\n\n# 出力\n指定スキーマの JSON のみを返してください。\n' "$1"
 }
 
-# 1 グループ分の diff を auditor にかけ、違反を all_violations に集約する。
-audit_diff() {
-  local out exit_code err_msg violations_type
+build_re_audit_prompt() {
+  local delta="$1" assigned_files="$2"
+  printf '前回の審査のあとに、staged の内容が変わりました。同じルールとレビュー方針で、あなたの担当ファイルについて、次の違反を violations に返してください。line には今の内容の行番号を入れてください。\n- 前回までに指摘した違反のうち、今の内容に残っているもの\n- 下の diff で新しく生じた違反\n'
+  printf '\n# 担当ファイル\n%s\n' "$assigned_files"
+  printf '\n# 前回審査した内容から今の内容への変更\n\n```diff\n%s\n```\n\n# 出力\n指定スキーマの JSON のみを返してください。\n' "$delta"
+}
+
+# プロンプトを監査の Claude に渡し、会話の ID と違反を受け取る。会話の ID を渡すと、その会話を続ける。
+run_auditor() {
+  local prompt="$1" resume_id="$2" out exit_code err_msg violations_type restart_hint=""
+  local resume_args=()
+  if [ -n "$resume_id" ]; then
+    resume_args=(--resume "$resume_id")
+    restart_hint=" 最初から審査し直すときは、${state_file} を削除してください。"
+  fi
   # 親のフックが監査の出力を報告の雛形でないとして差し戻すのを防ぐため、フックを切る。
-  out=$(build_prompt "$1" | claude -p \
+  out=$(printf '%s' "$prompt" | (cd "$AUDITOR_WORK_DIR" && claude -p \
     --model "$AUDITOR_MODEL" \
     --settings '{"disableAllHooks": true}' \
     --tools "" \
     --output-format json \
     --json-schema "$AUDIT_SCHEMA" \
-    --no-session-persistence 2>"$err_file")
+    ${resume_args[@]+"${resume_args[@]}"}) 2>"$err_file")
   exit_code=$?
-  [ "$exit_code" -ne 0 ] && fail_closed "Claude auditor 起動に失敗 (exit ${exit_code})。$(head -20 "$err_file" 2>/dev/null)"
+  [ "$exit_code" -ne 0 ] && fail_closed "Claude auditor 起動に失敗 (exit ${exit_code})。$(head -n "$ERROR_OUTPUT_MAX_LINES" "$err_file" 2>/dev/null)${restart_hint}"
 
   if [ "$(printf '%s' "$out" | jq -r '.is_error // false')" = "true" ]; then
     err_msg=$(printf '%s' "$out" | jq -r '.result // ""')
-    fail_closed "Claude auditor が API エラー。${err_msg}"
+    fail_closed "Claude auditor が API エラー。${err_msg}${restart_hint}"
   fi
 
   # jq は null の添字参照を length 0 とみなすため、欠落・型不正は type で見分ける。
   violations_type=$(printf '%s' "$out" | jq -r '.structured_output.violations | type' 2>/dev/null)
   if [ "$violations_type" != "array" ]; then
-    fail_closed "auditor 出力の structured_output.violations が配列でない (type=${violations_type})。$(printf '%s' "$out" | jq -r '.result // ""' | head -c 500)"
+    fail_closed "auditor 出力の structured_output.violations が配列でない (type=${violations_type})。$(printf '%s' "$out" | jq -r '.result // ""' | head -c "$AUDITOR_RESULT_MAX_BYTES")${restart_hint}"
   fi
 
-  all_violations=$(jq -cn --argjson a "$all_violations" --argjson b "$(printf '%s' "$out" | jq -c '.structured_output.violations')" '$a + $b')
+  auditor_result=$(printf '%s' "$out" | jq -ce 'select(.session_id | type == "string") | {session_id, violations: .structured_output.violations}') \
+    || fail_closed "auditor 出力に会話の ID (session_id) が無い。${restart_hint}"
 }
 
-# 現在のグループに溜めた staged ファイルの diff をまとめて監査し、グループをリセットする。
+# 現在のグループに溜めたファイルの差分を新しい監査の Claude にまとめて監査させ、担当ファイルとともに一覧に加えて、グループを空にする。
 flush_group() {
   [ "${#group_files[@]}" -eq 0 ] && return 0
-  audit_diff "$(git diff --cached -U"$DIFF_CONTEXT_LINES" --diff-filter=ACM -- "${group_files[@]}" 2>/dev/null)"
+  local group_files_json
+  run_auditor "$(build_prompt "$(kn_diff_staged_files "$DIFF_CONTEXT_LINES" "${group_files[@]}" 2>/dev/null)")" ""
+  group_files_json=$(printf '%s\n' "${group_files[@]}" | jq -R . | jq -sc .)
+  auditors=$(printf '%s' "$auditors" | jq -c --argjson result "$auditor_result" --argjson files "$group_files_json" --argjson diff_bytes "$group_bytes" \
+    '. + [$result + {files: $files, diff_bytes: $diff_bytes}]')
   group_files=()
   group_bytes=0
 }
 
-# auditor の context に収まるよう、ファイル単位で diff をグループに分けて監査する。
-audit_staged_files() {
-  local file file_bytes
+# 監査の Claude の会話に収まるよう、まだ担当がいないファイルを、差分の大きさでグループに分けて監査する。
+audit_unassigned_files() {
+  local file file_bytes unassigned_names
+  unassigned_names=$(printf '%s' "$auditors" | jq -r --argjson staged "$staged_names_json" '$staged - [.[].files[]] | .[]') \
+    || fail_closed "担当の auditor がいないファイルを求められない。最初から審査し直すときは、${state_file} を削除してください。"
   group_files=()
   group_bytes=0
-  for file in "${staged_files[@]}"; do
-    file_bytes=$(git diff --cached -U"$DIFF_CONTEXT_LINES" --diff-filter=ACM -- "$file" 2>/dev/null | wc -c | tr -d ' ')
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    file_bytes=$(kn_diff_staged_files "$DIFF_CONTEXT_LINES" "$file" 2>/dev/null | wc -c | tr -d ' ')
     if [ "$file_bytes" -gt "$diff_budget" ]; then
       fail_closed "単一ファイルの diff が監査予算を超過 (${file}: ${file_bytes} bytes > ${diff_budget})。当該ファイルの変更を分けてコミットしてください。"
     fi
@@ -253,8 +280,48 @@ audit_staged_files() {
     fi
     group_files+=("$file")
     group_bytes=$(( group_bytes + file_bytes ))
-  done
+  done <<< "$unassigned_names"
   flush_group
+}
+
+# 前回の審査のあとに内容が変わっていれば、指摘が残る監査の Claude と、担当ファイルが変わった監査の Claude の会話を続けて、変更を審査させる。
+re_audit_changes() {
+  local previous_tree="$1" changed_names changed_names_json delta delta_bytes indexes index auditor total_bytes
+  local restart_hint="最初から審査し直すときは、${state_file} を削除してください。"
+  # 名前を変える前のファイルを担当する監査の Claude も選ぶため、名前の変更を削除と追加に分けて一覧にする。
+  changed_names=$(git diff --name-only -z --no-renames "$previous_tree" "$staged_tree" -- . "${EXCLUDED_PATHSPECS[@]}" 2>"$err_file" | tr '\0' '\n') \
+    || fail_closed "前回審査した内容との違いを取れない。$(head -n "$ERROR_OUTPUT_MAX_LINES" "$err_file" 2>/dev/null) ${restart_hint}"
+  [ -z "$changed_names" ] && return 0
+  delta=$(git diff -U"$DIFF_CONTEXT_LINES" -M "$previous_tree" "$staged_tree" -- . "${EXCLUDED_PATHSPECS[@]}" 2>"$err_file") \
+    || fail_closed "前回審査した内容からの変更を取れない。$(head -n "$ERROR_OUTPUT_MAX_LINES" "$err_file" 2>/dev/null) ${restart_hint}"
+  delta_bytes=$(printf '%s' "$delta" | wc -c | tr -d ' ')
+
+  changed_names_json=$(printf '%s\n' "$changed_names" | jq -R . | jq -sc .)
+  # 同じコミットに向けた審査を同じ会話で続けるため、再試行で加えたファイルは、変更が監査予算に収まる前の監査の Claude の担当に加える。
+  auditors=$(printf '%s' "$auditors" | jq -c --argjson staged "$staged_names_json" --argjson changed "$changed_names_json" \
+    --argjson delta_bytes "$delta_bytes" --argjson budget "$diff_budget" '
+    ($staged - [.[].files[]] | map(select(IN($changed[])))) as $added
+    | ([to_entries[] | select(.value.diff_bytes + $delta_bytes <= $budget)] | min_by(.value.diff_bytes) | .key) as $index
+    | if $index == null then . else .[$index].files += $added end') \
+    || fail_closed "再試行で加えたファイルを auditor の担当に加えられない。${restart_hint}"
+  indexes=$(printf '%s' "$auditors" | jq -r --argjson changed "$changed_names_json" \
+    'to_entries[] | select((.value.violations | length > 0) or any(.value.files[]; IN($changed[]))) | .key') \
+    || fail_closed "前回の審査の記録から、続きを審査させる auditor を選べない。${restart_hint}"
+  for index in $indexes; do
+    auditor=$(printf '%s' "$auditors" | jq -c --argjson index "$index" '.[$index]')
+    # 続ける会話には前回までに渡した差分が残るため、合計が監査予算に収まるかを確かめる。
+    total_bytes=$(( $(printf '%s' "$auditor" | jq -r '.diff_bytes') + delta_bytes ))
+    [ "$total_bytes" -gt "$diff_budget" ] && fail_closed "auditor の会話に渡す diff の合計が監査予算を超過 (${total_bytes} bytes > ${diff_budget})。${restart_hint}"
+    run_auditor "$(build_re_audit_prompt "$delta" "$(printf '%s' "$auditor" | jq -r '.files[]')")" "$(printf '%s' "$auditor" | jq -r '.session_id')"
+    auditors=$(printf '%s' "$auditors" | jq -c --argjson index "$index" --argjson result "$auditor_result" --argjson total_bytes "$total_bytes" \
+      '.[$index] += $result + {diff_bytes: $total_bytes}')
+  done
+}
+
+save_auditor_state() {
+  jq -n --arg head "$head_commit" --arg tree "$staged_tree" --argjson auditors "$auditors" \
+    '{head: $head, tree: $tree, auditors: $auditors}' > "$state_file" \
+    || fail_closed "審査の記録 (${state_file}) を書けない。"
 }
 
 format_violations() {
@@ -324,18 +391,13 @@ fi
 OVERLAY_RULES=""
 [ -n "$overlay_path" ] && [ "$overlay_path" != "$BASE_RULES" ] && OVERLAY_RULES="$overlay_path"
 
-staged_diff=$(git diff --cached -U"$DIFF_CONTEXT_LINES" --diff-filter=ACM -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
+staged_diff=$(git diff --cached -M -U"$DIFF_CONTEXT_LINES" --diff-filter="$KN_AUDITED_CHANGE_TYPES" -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
 if [ -z "$staged_diff" ]; then
   # 監査する差分が空の記録が無いと、監査が動かなかったのか差分が無かったのかをログから見分けられないため、差分が空でも記録する。
   log_audit_entry "allow_no_diff" "$repo_name" '[]' || fail_closed "監査ログ (${AUDIT_LOG_FILE}) を書けない。"
   record_pass
   exit 0
 fi
-staged_names=$(git diff --cached --name-only --diff-filter=ACM -- . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null)
-staged_files=()
-while IFS= read -r file; do
-  [ -n "$file" ] && staged_files+=("$file")
-done <<< "$staged_names"
 
 extra_docs=()
 while IFS= read -r doc; do
@@ -347,7 +409,7 @@ done < <(jq -r '(.extra_docs // [])[]' "$config_file")
 auto_refs=$(kn_auto_inject_refs "$BASE_RULES" "${BASE_RULES}/principles.md") \
   || fail_closed 'principles.md が参照する base ルールの自動導出に失敗。'
 auto_refs_json=$(printf '%s\n' "$auto_refs" | jq -R . | jq -sc 'map(select(length > 0))')
-staged_names_json=$(printf '%s\n' "$staged_names" | jq -R . | jq -sc 'map(select(length > 0))')
+staged_names_json=$(kn_list_staged_files "$KN_AUDITED_CHANGE_TYPES" . "${EXCLUDED_PATHSPECS[@]}" 2>/dev/null | jq -R . | jq -sc 'map(select(length > 0))')
 
 rule_plan=$(plan_rules) || fail_closed "言語のルールの条件 (files) が不正。"
 
@@ -373,8 +435,25 @@ if [ "$diff_budget" -lt "$MIN_DIFF_BUDGET_BYTES" ]; then
   fail_closed "ルール群が大きく diff 予算を確保できない (rules=${rules_bytes} bytes, max=${MAX_PROMPT_BYTES})。"
 fi
 
-all_violations='[]'
-audit_staged_files
+mkdir -p "$AUDITOR_WORK_DIR" || fail_closed "auditor の作業ディレクトリ (${AUDITOR_WORK_DIR}) を作れない。"
+state_file="$(git rev-parse --path-format=absolute --git-dir)/${AUDITOR_STATE_FILE_NAME}" || fail_closed 'commit 先の git ディレクトリを求められない。'
+# コミットが 1 つも無いリポジトリも審査できるようにするため、HEAD が無いときは空文字として扱う。
+head_commit=$(git rev-parse --verify --quiet HEAD)
+staged_tree=$(git write-tree) || fail_closed 'ステージ内容の tree を作れない。'
+
+auditors='[]'
+if [ -f "$state_file" ]; then
+  previous_state=$(jq -ce 'select((.head | type == "string") and (.tree | type == "string") and (.auditors | type == "array"))' "$state_file") \
+    || fail_closed "前回の審査の記録 (${state_file}) が壊れている。削除してから commit してください。"
+  # コミットが作られたあとにステージした差分は別の変更のため、HEAD が前回の審査のときと同じ場合だけ、前回の監査の Claude に続きを審査させる。
+  if [ "$(printf '%s' "$previous_state" | jq -r '.head')" = "$head_commit" ]; then
+    auditors=$(printf '%s' "$previous_state" | jq -c '.auditors')
+    re_audit_changes "$(printf '%s' "$previous_state" | jq -r '.tree')"
+  fi
+fi
+audit_unassigned_files
+save_auditor_state
+all_violations=$(printf '%s' "$auditors" | jq -c '[.[].violations[]]') || fail_closed "審査の記録 (${state_file}) から違反を取り出せない。削除してから commit してください。"
 
 violations_count=$(printf '%s' "$all_violations" | jq 'length')
 if [ "$violations_count" -eq 0 ]; then
