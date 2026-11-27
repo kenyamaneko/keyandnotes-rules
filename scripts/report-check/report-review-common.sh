@@ -13,7 +13,7 @@ readonly MIN_QUOTE_LENGTH=10
 readonly FAILURE_OUTPUT_LENGTH=500
 readonly ISSUE_SCHEMA='{"type":"array","items":{"type":"object","properties":{"sentence":{"type":"string"},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"problem":{"type":"string"}},"required":["sentence","basis_file","basis_quote","problem"]}}'
 readonly ITEM_SCHEMA='{"type":"array","items":{"type":"object","properties":{"number":{"type":"integer"},"verdict":{"type":"string","enum":["ルールで解決できる","聞いてよい"]},"basis_file":{"type":"string"},"basis_quote":{"type":"string"},"chosen_option":{"type":"string"},"explanation":{"type":"string"}},"required":["number","verdict","basis_file","basis_quote","chosen_option","explanation"]}}'
-readonly REVIEW_SCHEMA="{\"type\":\"object\",\"properties\":{\"items\":${ITEM_SCHEMA},\"concise_issues\":${ISSUE_SCHEMA},\"document_issues\":${ISSUE_SCHEMA}},\"required\":[\"items\",\"concise_issues\",\"document_issues\"]}"
+readonly REVIEW_SCHEMA="{\"type\":\"object\",\"properties\":{\"items\":${ITEM_SCHEMA},\"concise_issues\":${ISSUE_SCHEMA},\"document_issues\":${ISSUE_SCHEMA},\"wording_issues\":${ISSUE_SCHEMA}},\"required\":[\"items\",\"concise_issues\",\"document_issues\",\"wording_issues\"]}"
 
 # shellcheck source=../rules-control/read-log-common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../rules-control/read-log-common.sh"
@@ -23,6 +23,7 @@ rules_dir="${repo_dir}/rules"
 templates_dir="${repo_dir}/templates"
 principles_file="${rules_dir}/principles.md"
 documentation_file="${rules_dir}/documentation.md"
+notation_table_file="${rules_dir}/notation-table.md"
 report_template_file="${templates_dir}/report.template.md"
 
 extract_section() {
@@ -170,7 +171,7 @@ build_reviewer_prompt() {
   local message="$1" html="$2"
   cat <<EOF
 あなたは、ユーザーへの報告を検査するレビュアーである。
-最初に ${principles_file}・${documentation_file}・${report_template_file} を Read で全文読む。そのあと、下の報告について次の三つを検査する。
+最初に ${principles_file}・${documentation_file}・${notation_table_file}・${report_template_file} を Read で全文読む。そのあと、下の報告について次の四つを検査する。
 
 検査1: 判断事項の各項目が、ユーザーに聞くべきでない項目かを判定する。判断事項の項目がなければ、items を空の配列にする。
 判定基準 (ユーザーの指示、原文):
@@ -187,7 +188,9 @@ verdict が「聞いてよい」のときは、basis_file・basis_quote・chosen
 sentence に違反している文を一行分そのまま (要約や複数行の連結をせず) 引用し、basis_file に根拠のファイルの絶対パス、basis_quote に根拠の条文を一行分そのまま引用し、problem に何が違反かを書く。HTML の文は、本文のテキストの一行に収まる範囲で引用する。
 根拠の条文を示せない指摘は書かない。違反がなければ concise_issues を空の配列にする。
 
-検査3: 報告用の HTML の本文に、${documentation_file} の条文 (「## 適用範囲」の節で HTML に適用すると定めたもの) へ違反している文があれば、document_issues に書く。条文を上から一つずつ HTML に当てはめて、見落としをなくす。書き方は検査2と同じにする。報告用の HTML が無いときは document_issues を空の配列にする。
+検査3: 報告用の HTML の本文に、${documentation_file} の条文 (「## 適用範囲」の節で HTML に適用すると定めたもの。「## 語の選び方」の節の条文は検査4で扱う) へ違反している文があれば、document_issues に書く。条文を上から一つずつ HTML に当てはめて、見落としをなくす。書き方は検査2と同じにする。報告用の HTML が無いときは document_issues を空の配列にする。
+
+検査4: 報告全体と、報告用の HTML があればその本文に、${documentation_file} の「## 語の選び方」の節の条文か、${notation_table_file} の表へ違反している文があれば、wording_issues に書く。条文と表の行を上から一つずつ当てはめて、見落としをなくす。表の「避ける表記」の括弧は、違反になる使い方を示す。表記そのものを話題にして挙げているだけの語 (例: 避ける表記の一覧) は違反にしない。書き方は検査2と同じにする。表を根拠にするときは、basis_quote に表の行を一行まるごと引用する。違反がなければ wording_issues を空の配列にする。
 
 報告:
 ${message}
@@ -198,7 +201,7 @@ EOF
 build_re_review_prompt() {
   local message="$1" html="$2"
   cat <<EOF
-あなたが前に検査した報告が直された。前の指摘が直ったかと、直した箇所に新しい違反がないかを検査し、前と同じ三つの検査の書き方で出力する。直っていない指摘は、もう一度書く。直していない箇所の判定は変えない。
+あなたが前に検査した報告が直された。前の指摘が直ったかと、直した箇所に新しい違反がないかを検査し、前と同じ四つの検査の書き方で出力する。直っていない指摘は、もう一度書く。直していない箇所の判定は変えない。
 
 直した報告:
 ${message}
@@ -279,7 +282,7 @@ collect_decision_reasons() {
   done < <(printf '%s' "$review_json" | jq -c --arg verdict "$VERDICT_RESOLVABLE" '.items[] | select(.verdict == $verdict)')
 }
 
-# 簡潔さの指摘 (concise_issues) と文書の書き方の指摘 (document_issues) は同じ形のため、指摘の種類を引数で受けて同じ処理で出す。
+# 簡潔さ (concise_issues)・文書の書き方 (document_issues)・語の選び方 (wording_issues) の指摘は同じ形のため、指摘の種類を引数で受けて同じ処理で出す。
 collect_issue_reasons() {
   local review_json="$1" message="$2" issues_key="$3" label="$4" issue sentence quote basis_file problem
   while IFS= read -r issue; do
@@ -328,14 +331,16 @@ ${unread_files}
   fi
   record_reviewer_id "$session_id" "$prompt_id" "$responded_reviewer_id"
 
-  local decision_reasons concise_reasons document_reasons quotable_text
+  local decision_reasons concise_reasons document_reasons wording_reasons quotable_text
   quotable_text="${message}"$'\n'"${html}"
   decision_reasons=$(collect_decision_reasons "$review_json")
   concise_reasons=$(collect_issue_reasons "$review_json" "$quotable_text" concise_issues '簡潔さの指摘')
   document_reasons=$(collect_issue_reasons "$review_json" "$html" document_issues '報告用の HTML の書き方の指摘')
+  wording_reasons=$(collect_issue_reasons "$review_json" "$quotable_text" wording_issues '語の選び方の指摘')
   [ -n "$decision_reasons" ] && reasons+="${decision_reasons}"$'\n\n'
   [ -n "$concise_reasons" ] && reasons+="${concise_reasons}"$'\n\n'
   [ -n "$document_reasons" ] && reasons+="${document_reasons}"$'\n\n'
+  [ -n "$wording_reasons" ] && reasons+="${wording_reasons}"$'\n\n'
   [ -n "$reasons" ] && printf '%s' "$reasons"
   return 0
 }
