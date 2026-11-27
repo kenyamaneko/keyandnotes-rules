@@ -5,6 +5,9 @@ set -euo pipefail
 
 readonly DEFAULT_SETTINGS_FILE="${HOME}/.claude/settings.json"
 
+# shellcheck source=../commit-audit/claude-audit-common.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../commit-audit/claude-audit-common.sh"
+
 # worktree から実行しても、worktree を消したときにフックが壊れないよう、登録するパスは本体のチェックアウトにする。
 git_common_dir="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --path-format=absolute --git-common-dir)"
 scripts_dir="$(dirname "$git_common_dir")/scripts"
@@ -22,6 +25,7 @@ registered=$(jq \
   --arg guard "${scripts_dir}/rules-control/guard-rules-edit.sh" \
   --arg machine_audit "${scripts_dir}/commit-audit/pre-commit-machine-audit.sh" \
   --arg claude_audit "${scripts_dir}/commit-audit/pre-commit-claude-audit.sh" \
+  --argjson claude_audit_timeout "$KN_CLAUDE_AUDIT_TIMEOUT_SECONDS" \
   --arg hold "${scripts_dir}/report-check/hold-unchecked-report.sh" '
   def register($event; $entry):
     .hooks[$event] = ((.hooks[$event] // []) + [$entry]);
@@ -34,7 +38,7 @@ registered=$(jq \
   | register("MessageDisplay"; {hooks: [{type: "command", command: $hold}]})
   | register("PostToolUse"; {matcher: "Read", hooks: [{type: "command", command: $record}]})
   | register("PreToolUse"; {matcher: "Edit|Write", hooks: [{type: "command", command: $guard}]})
-  | register("PreToolUse"; {matcher: "Bash", hooks: [{type: "command", command: $machine_audit}, {type: "command", command: $claude_audit}]})
+  | register("PreToolUse"; {matcher: "Bash", hooks: [{type: "command", command: $machine_audit}, {type: "command", command: $claude_audit, timeout: $claude_audit_timeout}]})
 ' "$settings_file")
 
 printf '%s\n' "$registered" > "$settings_file"

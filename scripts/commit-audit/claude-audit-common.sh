@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# commit 前の監査フック (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh) から source される。
-# 複数のフックが同じ判断をするため、コミット先の解決・principles.md の @import 一覧の導出・ステージ内容の読み取り・監査を通した記録の読み書き (git の pre-commit フックも使う) をここに置く。
+# コミット前の監査フック (pre-commit-claude-audit.sh・pre-commit-machine-audit.sh)・git の pre-commit フック・フックを登録する setup-hooks.sh から読み込まれる。
+# 複数のスクリプトが同じ判断をするため、コミット先の解決・principles.md の @import 一覧の導出・ステージ内容の読み取り・監査を通した記録の読み書き・Claude の監査の制限時間をここに置く。
 
 KN_SHARED_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 readonly KN_SHARED_REPO_DIR
@@ -128,8 +128,13 @@ kn_write_staged_tree() (
 
 readonly KN_AUDIT_RECORD_DIR_NAME="kn-commit-audit"
 
-# 監査の確認ダイアログで許可を待つ間に記録が古くならないため、記録を有効とみなす時間 (分) を長めにする。
-readonly KN_AUDIT_RECORD_TTL_MINUTES=30
+# 大きい変更の監査が打ち切られないようにするため、Claude の監査のフックの制限時間 (秒) は既定の 600 秒より長くする。
+readonly KN_CLAUDE_AUDIT_TIMEOUT_SECONDS=1800
+
+readonly KN_AUDIT_APPROVAL_WAIT_MINUTES=30
+readonly KN_SECONDS_PER_MINUTE=60
+# 同時に走る監査で先に書かれた記録が、残りの監査と確認ダイアログの許可を待つ間に古くならないようにするため、記録を有効とみなす時間 (分) は Claude の監査の制限時間と許可を待つ時間の合計にする。
+readonly KN_AUDIT_RECORD_TTL_MINUTES=$(( KN_CLAUDE_AUDIT_TIMEOUT_SECONDS / KN_SECONDS_PER_MINUTE + KN_AUDIT_APPROVAL_WAIT_MINUTES ))
 
 readonly KN_AUDIT_NAMES=(machine claude)
 

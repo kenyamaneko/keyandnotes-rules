@@ -35,6 +35,9 @@ readonly MIN_DIFF_BUDGET_BYTES=20000
 readonly AUDITOR_WORK_DIR="${HOME}/.claude/kn-commit-audit-sessions"
 readonly AUDITOR_STATE_FILE_NAME="kn-commit-auditors.json"
 
+# コミットしない内容を根拠に違反を見逃すのを防ぐため、監査の Claude がファイルを読める範囲は、作業ディレクトリとステージした内容を展開した場所に限る。
+readonly AUDITOR_SETTINGS='{"disableAllHooks": true, "permissions": {"blockReadsOutsideWorkingDirectories": true}}'
+
 readonly ERROR_OUTPUT_MAX_LINES=20
 readonly AUDITOR_RESULT_MAX_BYTES=500
 
@@ -181,6 +184,7 @@ overlay は対応する base のルールを上書きする階層です。base �
 - 明確なルール違反のみ列挙する。主観的な改善提案・スタイル好みは含めない
 - 各違反は file / line / rule / evidence / why / clarity / fix_safety を埋める。line は違反箇所の行番号 (diff の追加行) を必ず入れる
 - 違反 0 件なら "violations": [] を返す
+- ステージした内容のファイルは ${staged_files_dir} の下にある。Read・Grep・Glob は、「無い」「書かれていない」という違反の記述を探すためだけに使う。その違反は、返す前に、同じファイルの別の場所と参照先のファイルから記述を探し、見つけた記述でルールを満たすときは返さない
 
 各違反を 2 軸で分類してください (hook が「worker が自律修正してよいか」を判定するのに使う):
 - clarity (明白度):
@@ -212,6 +216,7 @@ HEADER
 build_re_audit_prompt() {
   local delta="$1" assigned_files="$2"
   printf '前回の審査のあとに、staged の内容が変わりました。同じルールとレビュー方針で、あなたの担当ファイルについて、次の違反を violations に返してください。line には今の内容の行番号を入れてください。\n- 前回までに指摘した違反のうち、今の内容に残っているもの\n- 下の diff で新しく生じた違反\n'
+  printf '\n今の内容のファイルは %s の下に展開し直しました。「無い」「書かれていない」という違反は、前回までに指摘したものも含め、返す前にここで記述を探してください。\n' "$staged_files_dir"
   printf '\n# 担当ファイル\n%s\n' "$assigned_files"
   printf '\n# 前回審査した内容から今の内容への変更\n\n```diff\n%s\n```\n\n# 出力\n指定スキーマの JSON のみを返してください。\n' "$delta"
 }
@@ -227,8 +232,9 @@ run_auditor() {
   # 親のフックが監査の出力を報告の雛形でないとして差し戻すのを防ぐため、フックを切る。
   out=$(printf '%s' "$prompt" | (cd "$AUDITOR_WORK_DIR" && claude -p \
     --model "$AUDITOR_MODEL" \
-    --settings '{"disableAllHooks": true}' \
-    --tools "" \
+    --settings "$AUDITOR_SETTINGS" \
+    --tools "Read,Grep,Glob" \
+    --add-dir "$staged_files_dir" \
     --output-format json \
     --json-schema "$AUDIT_SCHEMA" \
     ${resume_args[@]+"${resume_args[@]}"}) 2>"$err_file")
@@ -273,7 +279,7 @@ audit_unassigned_files() {
     [ -z "$file" ] && continue
     file_bytes=$(kn_diff_staged_files "$DIFF_CONTEXT_LINES" "$file" 2>/dev/null | wc -c | tr -d ' ')
     if [ "$file_bytes" -gt "$diff_budget" ]; then
-      fail_closed "単一ファイルの diff が監査予算を超過 (${file}: ${file_bytes} bytes > ${diff_budget})。当該ファイルの変更を分けてコミットしてください。"
+      fail_closed "単一ファイルの diff が監査予算を超過 (${file}: ${file_bytes} bytes > ${diff_budget})。大きさを理由にコミットを分けず、ユーザーに相談してください。"
     fi
     if [ $(( group_bytes + file_bytes )) -gt "$diff_budget" ]; then
       flush_group
@@ -316,6 +322,15 @@ re_audit_changes() {
     auditors=$(printf '%s' "$auditors" | jq -c --argjson index "$index" --argjson result "$auditor_result" --argjson total_bytes "$total_bytes" \
       '.[$index] += $result + {diff_bytes: $total_bytes}')
   done
+}
+
+# 監査の Claude が記述を探せるように、ステージ内容のツリーのファイルを展開する。
+export_staged_files() {
+  local repo_toplevel index_file="${export_dir}/index"
+  repo_toplevel=$(git rev-parse --show-toplevel 2>"$err_file") || return 1
+  GIT_INDEX_FILE="$index_file" git read-tree "$staged_tree" 2>"$err_file" || return 1
+  mkdir -p "$staged_files_dir" 2>"$err_file" || return 1
+  GIT_INDEX_FILE="$index_file" git -C "$repo_toplevel" checkout-index --all --prefix="${staged_files_dir}/" 2>"$err_file"
 }
 
 save_auditor_state() {
@@ -429,6 +444,10 @@ if [ -n "$OVERLAY_RULES" ]; then
   done < <(find "$OVERLAY_RULES" -type f -name '*.md' | sort)
 fi
 
+export_dir=$(mktemp -d) || fail_closed 'ステージした内容を展開するディレクトリを作れない。'
+trap 'rm -f "$err_file" "$config_file"; rm -rf "$export_dir"' EXIT
+staged_files_dir="${export_dir}/files"
+
 rules_bytes=$(build_prompt "" | wc -c | tr -d ' ')
 diff_budget=$(( MAX_PROMPT_BYTES - rules_bytes ))
 if [ "$diff_budget" -lt "$MIN_DIFF_BUDGET_BYTES" ]; then
@@ -440,6 +459,7 @@ state_file="$(git rev-parse --path-format=absolute --git-dir)/${AUDITOR_STATE_FI
 # コミットが 1 つも無いリポジトリも審査できるようにするため、HEAD が無いときは空文字として扱う。
 head_commit=$(git rev-parse --verify --quiet HEAD)
 staged_tree=$(kn_write_staged_tree) || fail_closed 'ステージ内容のツリーを作れない。'
+export_staged_files || fail_closed "ステージした内容を展開できない。$(head -n "$ERROR_OUTPUT_MAX_LINES" "$err_file" 2>/dev/null)"
 
 auditors='[]'
 if [ -f "$state_file" ]; then
