@@ -49,6 +49,13 @@ kn_resolve_commit_dir() {
   printf '%s' "$dir"
 }
 
+# ステージした内容の一覧と差分をリポジトリ全体から取るため、作業ディレクトリをリポジトリのルートに移す。
+kn_move_to_repo_toplevel() {
+  local toplevel
+  toplevel=$(git rev-parse --show-toplevel) || return 1
+  cd "$toplevel" || return 1
+}
+
 # 指定したディレクトリが属するリポジトリの本体のチェックアウト (worktree の場合は本体) のルートを返す。
 kn_main_checkout_root() {
   local common_dir
