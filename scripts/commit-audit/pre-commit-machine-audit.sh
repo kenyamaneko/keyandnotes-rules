@@ -15,7 +15,7 @@ readonly SHARED_REPO_DIR
 readonly COMMON_LIB="${SHARED_REPO_DIR}/scripts/commit-audit/claude-audit-common.sh"
 
 fail_closed() {
-  printf '⚠️  pre-commit-machine-audit: %s 監査不能のため fail-safe で commit ブロック。\n' "$1" >&2
+  printf '⚠️  pre-commit-machine-audit: %s 監査不能のため fail-safe で commit ブロック。表示した原因を解消してから、もう一度コミットしてください。\n' "$1" >&2
   exit 2
 }
 

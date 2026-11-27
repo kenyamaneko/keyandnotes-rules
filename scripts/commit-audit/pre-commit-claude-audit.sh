@@ -129,7 +129,7 @@ log_audit_entry() {
 }
 
 fail_closed() {
-  printf '⚠️  pre-commit-claude-audit: %s 監査不能のため fail-safe で commit ブロック。\n' "$1" >&2
+  printf '⚠️  pre-commit-claude-audit: %s 監査不能のため fail-safe で commit ブロック。表示した原因を解消してから、もう一度コミットしてください。\n' "$1" >&2
   exit 2
 }
 
@@ -250,7 +250,7 @@ run_auditor() {
     || fail_closed "auditor 出力に会話の ID (session_id) が無い。${restart_hint}"
 }
 
-# 現在のグループに溜めたファイルの差分を新しい監査の Claude にまとめて監査させ、担当ファイルとともに一覧に加えて、グループを空にする。
+# 現在のグループのファイルを、新しい監査の Claude に監査させる。
 flush_group() {
   [ "${#group_files[@]}" -eq 0 ] && return 0
   local group_files_json
@@ -262,7 +262,7 @@ flush_group() {
   group_bytes=0
 }
 
-# 監査の Claude の会話に収まるよう、まだ担当がいないファイルを、差分の大きさでグループに分けて監査する。
+# まだ担当がいないファイルを、新しい監査の Claude に監査させる。
 audit_unassigned_files() {
   local file file_bytes unassigned_names
   unassigned_names=$(printf '%s' "$auditors" | jq -r --argjson staged "$staged_names_json" '$staged - [.[].files[]] | .[]') \
@@ -284,7 +284,7 @@ audit_unassigned_files() {
   flush_group
 }
 
-# 前回の審査のあとに内容が変わっていれば、指摘が残る監査の Claude と、担当ファイルが変わった監査の Claude の会話を続けて、変更を審査させる。
+# 前回の審査のあとの変更を、前に審査した監査の Claude に審査させる。
 re_audit_changes() {
   local previous_tree="$1" changed_names changed_names_json delta delta_bytes indexes index auditor total_bytes
   local restart_hint="最初から審査し直すときは、${state_file} を削除してください。"
