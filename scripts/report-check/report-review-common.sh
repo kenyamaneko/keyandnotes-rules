@@ -160,14 +160,14 @@ list_unread_rule_files() {
   done
 }
 
+format_html_section() {
+  local html="$1"
+  [ -n "$html" ] || return 0
+  printf '\n報告用の HTML (タグを除いた本文のテキスト):\n%s\n' "$html"
+}
+
 build_reviewer_prompt() {
-  local message="$1" html="$2" html_section=""
-  if [ -n "$html" ]; then
-    html_section="
-報告用の HTML (タグを除いた本文のテキスト):
-${html}
-"
-  fi
+  local message="$1" html="$2"
   cat <<EOF
 あなたは、ユーザーへの報告を検査するレビュアーである。
 最初に ${principles_file}・${documentation_file}・${report_template_file} を Read で全文読む。そのあと、下の報告について次の三つを検査する。
@@ -191,15 +191,43 @@ sentence に違反している文を一行分そのまま (要約や複数行の
 
 報告:
 ${message}
-${html_section}
+$(format_html_section "$html")
 EOF
+}
+
+build_re_review_prompt() {
+  local message="$1" html="$2"
+  cat <<EOF
+あなたが前に検査した報告が直された。前の指摘が直ったかと、直した箇所に新しい違反がないかを検査し、前と同じ三つの検査の書き方で出力する。直っていない指摘は、もう一度書く。直していない箇所の判定は変えない。
+
+直した報告:
+${message}
+$(format_html_section "$html")
+EOF
+}
+
+# 同じユーザー入力の報告を前に検査したレビュアーの会話の ID を返す。前の検査が無ければ何も返さない。
+read_reviewer_id() {
+  local session_id="$1" prompt_id="$2"
+  local id_file="${READ_LOG_DIR}/${session_id}.${prompt_id}.reviewer"
+  [ ! -f "$id_file" ] || cat "$id_file"
+}
+
+# 同じユーザー入力の報告を検査したレビュアーの会話の ID を記録する。
+record_reviewer_id() {
+  local session_id="$1" prompt_id="$2" reviewer_id="$3"
+  mkdir -p "$READ_LOG_DIR"
+  printf '%s\n' "$reviewer_id" > "${READ_LOG_DIR}/${session_id}.${prompt_id}.reviewer"
 }
 
 # 子プロセスが親のフック・MCP・スキルを読み込むと遅く高価になるうえ再帰するため、設定の読み込みを切り、ツールを Read だけにする。
 run_reviewer() {
-  local prompt="$1"
-  local work_dir status
-  work_dir=$(mktemp -d) || return 1
+  local prompt="$1" reviewer_id="$2"
+  # 残るレビュアーの会話の記録先が検査のたびに増えないようにするため、毎回同じ作業ディレクトリで動かす。
+  local work_dir="${READ_LOG_DIR}/reviewer-work"
+  local resume_args=()
+  [ -n "$reviewer_id" ] && resume_args=(--resume "$reviewer_id")
+  mkdir -p "$work_dir" || return 1
   (
     cd "$work_dir" || exit 1
     claude -p "$prompt" \
@@ -210,13 +238,10 @@ run_reviewer() {
       --disable-slash-commands \
       --tools Read \
       --add-dir "$repo_dir" \
-      --no-session-persistence \
       --output-format json \
-      --json-schema "$REVIEW_SCHEMA" < /dev/null
+      --json-schema "$REVIEW_SCHEMA" \
+      ${resume_args[@]+"${resume_args[@]}"} < /dev/null
   )
-  status=$?
-  rm -rf "$work_dir"
-  return "$status"
 }
 
 # 短い断片は何にでも一致するため、一定の長さ以上の引用だけを実在する条文として扱う。
@@ -271,7 +296,7 @@ collect_issue_reasons() {
 # 呼び出し側が違反と検査の失敗を見分けられるよう、違反の指摘は標準出力に出し、検査の失敗は標準エラー出力に出して 2 を返す。
 review_message() {
   local message="$1" session_id="$2" prompt_id="$3" html="${4:-}"
-  local reasons="" unread_files reviewer_output reviewer_status review_json
+  local reasons="" unread_files reviewer_output reviewer_status review_json responded_reviewer_id
 
   if has_decision_items "$message"; then
     unread_files=$(list_unread_rule_files "$session_id" "$prompt_id")
@@ -283,15 +308,25 @@ ${unread_files}
     fi
   fi
 
-  reviewer_output=$(run_reviewer "$(build_reviewer_prompt "$message" "$html")" 2>&1)
+  local reviewer_id reviewer_prompt
+  reviewer_id=$(read_reviewer_id "$session_id" "$prompt_id")
+  if [ -n "$reviewer_id" ]; then
+    reviewer_prompt=$(build_re_review_prompt "$message" "$html")
+  else
+    reviewer_prompt=$(build_reviewer_prompt "$message" "$html")
+  fi
+
+  reviewer_output=$(run_reviewer "$reviewer_prompt" "$reviewer_id" 2>&1)
   reviewer_status=$?
   review_json=$(printf '%s' "$reviewer_output" | jq -c '.structured_output' 2>/dev/null)
+  responded_reviewer_id=$(printf '%s' "$reviewer_output" | jq -r '.session_id | strings' 2>/dev/null)
 
-  if [ "$reviewer_status" -ne 0 ] || [ -z "$review_json" ] || [ "$review_json" = "null" ]; then
+  if [ "$reviewer_status" -ne 0 ] || [ -z "$review_json" ] || [ "$review_json" = "null" ] || [ -z "$responded_reviewer_id" ]; then
     printf '報告の検査 (別プロセスの Claude) が失敗した。報告の依頼事項に、検査フック (report-review-common.sh) の修正を書く。失敗の出力: %s\n' \
       "$(printf '%s' "$reviewer_output" | head -c "$FAILURE_OUTPUT_LENGTH")" >&2
     return 2
   fi
+  record_reviewer_id "$session_id" "$prompt_id" "$responded_reviewer_id"
 
   local decision_reasons concise_reasons document_reasons quotable_text
   quotable_text="${message}"$'\n'"${html}"
