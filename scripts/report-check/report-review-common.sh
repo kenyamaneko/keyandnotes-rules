@@ -23,6 +23,7 @@ rules_dir="${repo_dir}/rules"
 templates_dir="${repo_dir}/templates"
 principles_file="${rules_dir}/principles.md"
 documentation_file="${rules_dir}/documentation.md"
+testing_file="${rules_dir}/testing.md"
 notation_table_file="${rules_dir}/notation-table.md"
 report_template_file="${templates_dir}/report.template.md"
 
@@ -171,7 +172,7 @@ build_reviewer_prompt() {
   local message="$1" html="$2"
   cat <<EOF
 あなたは、ユーザーへの報告を検査するレビュアーである。
-最初に ${principles_file}・${documentation_file}・${notation_table_file}・${report_template_file} を Read で全文読む。そのあと、下の報告について次の四つを検査する。
+最初に ${principles_file}・${documentation_file}・${testing_file}・${notation_table_file}・${report_template_file} を Read で全文読む。そのあと、下の報告について次の四つを検査する。
 
 検査1: 判断事項の各項目が、ユーザーに聞くべきでない項目かを判定する。判断事項の項目がなければ、items を空の配列にする。
 判定基準 (ユーザーの指示、原文):
@@ -191,6 +192,8 @@ sentence に違反している文を一行分そのまま (要約や複数行の
 検査3: 報告用の HTML の本文に、${documentation_file} の条文 (「## 適用範囲」の節で HTML に適用すると定めたもの。「## 語の選び方」の節の条文は検査4で扱う) へ違反している文があれば、document_issues に書く。条文を上から一つずつ HTML に当てはめて、見落としをなくす。書き方は検査2と同じにする。報告用の HTML が無いときは document_issues を空の配列にする。
 
 検査4: 報告全体と、報告用の HTML があればその本文に、${documentation_file} の「## 語の選び方」の節の条文か、${notation_table_file} の表へ違反している文があれば、wording_issues に書く。条文と表の行を上から一つずつ当てはめて、見落としをなくす。表の「避ける表記」の括弧は、違反になる使い方を示す。表記そのものを話題にして挙げているだけの語 (例: 避ける表記の一覧) は違反にしない。書き方は検査2と同じにする。表を根拠にするときは、basis_quote に表の行を一行まるごと引用する。違反がなければ wording_issues を空の配列にする。
+
+検査2から検査4では、報告用の HTML にあるテストの仕様のうち、${testing_file} の条文に従って書いた箇所を違反にしない。
 
 報告:
 ${message}
